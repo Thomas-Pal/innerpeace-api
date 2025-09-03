@@ -1,3 +1,6 @@
+options:
+  logging: CLOUD_LOGGING_ONLY   # <-- this satisfies the build SA requirement
+
 substitutions:
   _REGION: europe-west2
   _REPO: innerpeace
