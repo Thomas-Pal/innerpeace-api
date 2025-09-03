@@ -1,0 +1,27 @@
+substitutions:
+  _REGION: europe-west2
+  _REPO: innerpeace
+  _SERVICE: innerpeace-api
+
+steps:
+- name: gcr.io/cloud-builders/docker
+  args: ['build','-t','${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}','.']
+
+- name: gcr.io/cloud-builders/docker
+  args: ['push','${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}']
+
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  entrypoint: bash
+  args:
+  - -c
+  - |
+    set -e
+    IMG="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}"
+    DIGEST="$(gcloud artifacts docker images describe "$IMG" --format='value(image_summary.digest)')"
+    gcloud run deploy ${_SERVICE} \
+      --region ${_REGION} \
+      --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}@${DIGEST} \
+      --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+      --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,GOOGLE_DELEGATED_USER=GOOGLE_DELEGATED_USER:latest,USE_MEET=USE_MEET:latest" \
+      --update-env-vars "AUTH_MODE=keyless-dwd,DWD_SA_EMAIL=calendar-dwd@$PROJECT_ID.iam.gserviceaccount.com" \
+      --port 8080 --min-instances=1 --max-instances=20 --concurrency=80 --timeout=240
