@@ -1,48 +1,47 @@
-# cloudbuild.yaml — no custom substitutions, no ${IMG} anywhere.
-# Builds, pushes, then deploys using a deterministic tag.
+cat > cloudbuild.yaml <<'YAML'
+# cloudbuild.yaml — minimal, safe, manual-build friendly.
+# No custom substitutions. Builds, pushes, then deploys to Cloud Run.
 
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
 timeout: "1200s"
 
-# 1) Build + Push inside the docker builder; write the full image ref to /workspace/IMG.txt
-- name: gcr.io/cloud-builders/docker
-  entrypoint: bash
-  args:
-    - -ceu
-    - |
-      set -o pipefail
-      # Use BUILD_ID if present; otherwise fall back to a timestamp
-      TAG="${BUILD_ID:-local-$(date +%s)}"
-      IMG="europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${TAG}"
+steps:
+  # 1) Build + push (compute a tag inside bash, never in top-level YAML)
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        set -o pipefail
+        TAG="${BUILD_ID:-local-$(date +%s)}"
+        IMG="europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${TAG}"
+        echo "Building ${IMG}"
+        docker build -t "${IMG}" .
+        docker push "${IMG}"
+        printf '%s' "${IMG}" > /workspace/IMG.txt
 
-      echo "Using tag: ${TAG}"
-      docker build -t "${IMG}" .
-      docker push "${IMG}"
+  # 2) Deploy the pushed image
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        set -o pipefail
+        IMG="$(cat /workspace/IMG.txt)"
+        gcloud run deploy innerpeace-api \
+          --region europe-west2 \
+          --image "${IMG}" \
+          --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+          --port 8080 \
+          --min-instances 1 \
+          --max-instances 20 \
+          --concurrency 80 \
+          --timeout 240 \
+          --update-env-vars "AUTH_MODE=keyless-dwd" \
+          --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,GOOGLE_DELEGATED_USER=GOOGLE_DELEGATED_USER:latest,USE_MEET=USE_MEET:latest" \
+          --allow-unauthenticated
+YAML
 
-      # Share the image reference with the next step
-      printf '%s' "${IMG}" > /workspace/IMG.txt
-
-# 2) Deploy from the pushed tag (no digest math, no substitutions)
-- name: gcr.io/google.com/cloudsdktool/cloud-sdk
-  entrypoint: bash
-  args:
-    - -ceu
-    - |
-      set -o pipefail
-      IMG="$(cat /workspace/IMG.txt)"
-
-      gcloud run deploy innerpeace-api \
-        --region europe-west2 \
-        --image "${IMG}" \
-        --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com" \
-        --port 8080 \
-        --min-instances 1 \
-        --max-instances 20 \
-        --concurrency 80 \
-        --timeout 240 \
-        --update-env-vars "AUTH_MODE=keyless-dwd" \
-        --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,GOOGLE_DELEGATED_USER=GOOGLE_DELEGATED_USER:latest,USE_MEET=USE_MEET:latest" \
-        --allow-unauthenticated
 
