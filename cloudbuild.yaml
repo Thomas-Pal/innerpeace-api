@@ -1,31 +1,61 @@
-# Cloud Build to build, push, and deploy InnerPeace API to Cloud Run
-# Uses Dockerfile at repo root.
-# Minimal, secure defaults. Change only the substitutions at the top.
+# cloudbuild.yaml
+# Build & deploy InnerPeace API to Cloud Run using Docker + Artifact Registry.
+
 substitutions:
   _REGION: europe-west2
   _REPO: innerpeace
   _SERVICE: innerpeace-api
-  _AUTH_MODE: keyless-dwd   # or 'adc' (see README)
+  _AUTH_MODE: keyless-dwd   # or 'adc' if you later switch auth mode
+
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: "1200s"
 
 steps:
-- name: gcr.io/cloud-builders/docker
-  args: ['build','-t','${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}','.']
+  # 1) Build container
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        "build",
+        "-t",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}",
+        ".",
+      ]
 
-- name: gcr.io/cloud-builders/docker
-  args: ['push','${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}']
+  # 2) Push to Artifact Registry
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        "push",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}",
+      ]
 
-- name: gcr.io/google.com/cloudsdktool/cloud-sdk
-  entrypoint: bash
-  args:
-  - -ceu
-  - |
-    IMG="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}"
-    DIGEST="$(gcloud artifacts docker images describe "$IMG" --format='value(image_summary.digest)')"
+  # 3) Deploy to Cloud Run (digest pinned)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        set -o pipefail
 
-    # Deploy to Cloud Run
-    gcloud run deploy ${_SERVICE}           --region ${_REGION}           --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}@${DIGEST}           --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com"           --min-instances=1 --max-instances=20 --concurrency=80 --timeout=240           --port=8080           --update-env-vars "AUTH_MODE=${_AUTH_MODE}"           --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,GOOGLE_DELEGATED_USER=GOOGLE_DELEGATED_USER:latest,USE_MEET=USE_MEET:latest"           --allow-unauthenticated
+        IMG="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}"
+        DIGEST="$(gcloud artifacts docker images describe "$IMG" --format='value(image_summary.digest)')"
+
+        gcloud run deploy "${_SERVICE}" \
+          --region "${_REGION}" \
+          --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}@${DIGEST}" \
+          --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+          --port 8080 \
+          --min-instances 1 \
+          --max-instances 20 \
+          --concurrency 80 \
+          --timeout 240 \
+          --update-env-vars "AUTH_MODE=${_AUTH_MODE}" \
+          --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,GOOGLE_DELEGATED_USER=GOOGLE_DELEGATED_USER:latest,USE_MEET=USE_MEET:latest" \
+          --allow-unauthenticated
 
 images:
-- '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}'
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}"
+
