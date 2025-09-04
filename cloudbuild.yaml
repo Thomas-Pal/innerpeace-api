@@ -1,61 +1,53 @@
-# cloudbuild.yaml
-# Build & deploy InnerPeace API to Cloud Run using Docker + Artifact Registry.
-
-substitutions:
-  _REGION: europe-west2
-  _REPO: innerpeace
-  _SERVICE: innerpeace-api
-  _AUTH_MODE: keyless-dwd   # or 'adc' if you later switch auth mode
+# cloudbuild.yaml — zero non-underscore substitutions, bulletproof against the IMAGE/IMG trap.
 
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
-
 timeout: "1200s"
 
 steps:
-  # 1) Build container
+  # 1) Build
   - name: gcr.io/cloud-builders/docker
     args:
       [
         "build",
         "-t",
-        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}",
+        "europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}",
         ".",
       ]
 
-  # 2) Push to Artifact Registry
+  # 2) Push
   - name: gcr.io/cloud-builders/docker
     args:
       [
         "push",
-        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}",
+        "europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}",
       ]
 
-  # 3) Deploy to Cloud Run (digest pinned)
+  # 3) Deploy (digest pinned)
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
     args:
       - -ceu
       - |
         set -o pipefail
-
-        IMG="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}"
+        IMG="europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}"
         DIGEST="$(gcloud artifacts docker images describe "$IMG" --format='value(image_summary.digest)')"
 
-        gcloud run deploy "${_SERVICE}" \
-          --region "${_REGION}" \
-          --image "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}@${DIGEST}" \
+        gcloud run deploy innerpeace-api \
+          --region europe-west2 \
+          --image europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api@${DIGEST} \
           --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com" \
           --port 8080 \
           --min-instances 1 \
           --max-instances 20 \
           --concurrency 80 \
           --timeout 240 \
-          --update-env-vars "AUTH_MODE=${_AUTH_MODE}" \
+          --update-env-vars "AUTH_MODE=keyless-dwd" \
           --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,GOOGLE_DELEGATED_USER=GOOGLE_DELEGATED_USER:latest,USE_MEET=USE_MEET:latest" \
           --allow-unauthenticated
 
 images:
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${SHORT_SHA}"
+  - "europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}"
+
 
