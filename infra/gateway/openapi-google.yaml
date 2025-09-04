@@ -1,0 +1,81 @@
+swagger: "2.0"
+info:
+  title: innerpeace-api
+  version: "1.0.0"
+schemes: ["https"]
+consumes: [application/json]
+produces: [application/json]
+
+securityDefinitions:
+  google_jwt:
+    type: oauth2
+    authorizationUrl: ""
+    flow: implicit
+    x-google-issuer: "https://accounts.google.com"
+    x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
+    x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com, 379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+      responses: { "200": { description: "OK" } }
+
+  /api/availability:
+    get:
+      operationId: getAvailability
+      parameters:
+        - { name: start, in: query, type: string, required: false }
+        - { name: end,   in: query, type: string, required: false }
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+      responses: { "200": { description: "OK" } }
+
+  /api/book:
+    post:
+      operationId: postBook
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+      responses: { "200": { description: "OK" } }
+
+  /api/bookings:
+    get:
+      operationId: getBookings
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+      responses: { "200": { description: "OK" } }
+
+  /api/book/{id}:
+    delete:
+      operationId: deleteBooking
+      parameters: [ { name: id, in: path, required: true, type: string } ]
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+      responses: { "200": { description: "OK" } }
+
+  /api/profile:
+    post:
+      operationId: postProfile
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-ypxs72xquq-nw.a.run.app"
+      responses: { "200": { description: "OK" } }
