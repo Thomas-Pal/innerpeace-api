@@ -1,5 +1,4 @@
-
-# cloudbuild.yaml — minimal, no custom substitutions, no ${IMG}/${DIGEST}
+# cloudbuild.yaml — manual-build friendly (uses ${BUILD_ID} which always exists)
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -9,13 +8,13 @@ timeout: "1200s"
 steps:
 # 1) Build
 - name: gcr.io/cloud-builders/docker
-  args: ["build","-t","europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}","."]
+  args: ["build","-t","europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${BUILD_ID}","."]
 
 # 2) Push
 - name: gcr.io/cloud-builders/docker
-  args: ["push","europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}"]
+  args: ["push","europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${BUILD_ID}"]
 
-# 3) Deploy (use the tag directly — no digest)
+# 3) Deploy (use the same tag)
 - name: gcr.io/google.com/cloudsdktool/cloud-sdk
   entrypoint: bash
   args:
@@ -23,7 +22,7 @@ steps:
     - |
       gcloud run deploy innerpeace-api \
         --region europe-west2 \
-        --image "europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}" \
+        --image "europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${BUILD_ID}" \
         --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com" \
         --port 8080 \
         --min-instances 1 \
@@ -35,5 +34,4 @@ steps:
         --allow-unauthenticated
 
 images:
-- "europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${SHORT_SHA}"
-YAML
+- "europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${BUILD_ID}"
