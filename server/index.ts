@@ -77,7 +77,8 @@ app.get('/api/availability', async (req, res) => {
       requestBody: {
         timeMin,
         timeMax,
-        items: [{ id: TARGET_CAL_ID }],
+        items: [{ id: MANAGER_CALENDAR_ID || 'primary' }], // always manager
+
       },
     });
 
