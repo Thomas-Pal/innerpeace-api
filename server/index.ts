@@ -135,6 +135,13 @@ app.post('/api/book', async (req, res) => {
         start: { dateTime: start },
         end: { dateTime: end },
         attendees: email ? [{ email }] : undefined,
+
+
+
+        attendees: [
+      { email: email ? [{ email }] : undefined},
+      { email: process.env.MANAGER_EMAIL || "thomaspal@innerpeace-developer.co.uk", displayName: "InnerPeace Manager (Simon)" }
+    ],
         location: !wantMeet ? (location || 'TBD') : undefined,
         conferenceData: wantMeet
           ? { createRequest: { requestId: `meet-${Date.now()}` } }
