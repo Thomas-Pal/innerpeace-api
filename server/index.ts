@@ -9,7 +9,8 @@ app.use(express.json());
 
 const {
   PORT = '8080',
-  CALENDAR_ID = 'thomaspal@innerpeace-developer.co.uk', // manager calendar
+  // Make sure this is the MANAGER calendar.
+  CALENDAR_ID = 'thomaspal@innerpeace-developer.co.uk',
   MANAGER_EMAIL = 'thomaspal@innerpeace-developer.co.uk',
   USE_MEET = 'auto', // 'auto' | 'always' | 'never'
 } = process.env as Record<string, string>;
@@ -45,7 +46,7 @@ app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
 /**
  * GET /api/availability?start=ISO&end=ISO
- * Requires calendar.readonly OR calendar.events scope.
+ * Free/busy for the MANAGER calendar.
  */
 app.get('/api/availability', async (req, res) => {
   try {
@@ -75,41 +76,76 @@ app.get('/api/availability', async (req, res) => {
 });
 
 /**
- * GET /api/bookings?uid=googleSub
- * Lists upcoming events on the manager calendar (no hard filter on text).
+ * Utility: fill in meet links for events missing hangoutLink by refetching with conferenceDataVersion.
+ * We cap the number of lookups to avoid hammering the API.
+ */
+async function enrichConferenceLinks(cal: ReturnType<typeof calendarClient>, events: any[]) {
+  const need = events
+    .filter(
+      (e) =>
+        !e?.hangoutLink &&
+        !((e?.conferenceData?.entryPoints || []).find((p: any) => p.entryPointType === 'video'))
+    )
+    .slice(0, 10); // cap
+
+  if (!need.length) return events;
+
+  const filled = await Promise.all(
+    need.map(async (e) => {
+      try {
+        // Cast to any because older googleapis typings don’t expose conferenceDataVersion on get.
+        const r = await cal.events.get(
+          { calendarId: CALENDAR_ID, eventId: e.id, conferenceDataVersion: 1 } as any
+        );
+        return r.data;
+      } catch {
+        return e;
+      }
+    })
+  );
+
+  const map = new Map(filled.map((e: any) => [e.id, e]));
+  return events.map((e) => map.get(e.id) || e);
+}
+
+/**
+ * GET /api/bookings
+ * Lists upcoming InnerPeace sessions on the MANAGER calendar.
  */
 app.get('/api/bookings', async (req, res) => {
   try {
     const { access } = requireAuth(req);
     const cal = calendarClient(access);
 
-    // small look-back so a just-created event isn’t dropped by time drift
+    // Look back 60s so brand-new creations aren't missed by time drift.
     const timeMin = new Date(Date.now() - 60_000).toISOString();
 
-    const events = await cal.events.list({
+    const resp = await cal.events.list({
       calendarId: CALENDAR_ID,
       timeMin,
       singleEvents: true,
       orderBy: 'startTime',
       maxResults: 50,
-      conferenceDataVersion: 1, // ← ensure Meet info is returned
-      // You can add q: 'InnerPeace Session' if you only want IP events,
-      // but leaving it off returns all events on the manager calendar.
+      q: 'InnerPeace Session',
     });
 
-    const items = (events.data.items || []).map((e) => {
+    let events = resp.data.items || [];
+    // Enrich missing meet links.
+    events = await enrichConferenceLinks(cal, events);
+
+    const items = events.map((e: any) => {
       const meetingUrl =
         e.hangoutLink ||
         (e.conferenceData?.entryPoints || []).find((p: any) => p.entryPointType === 'video')?.uri ||
         null;
       return {
-        id: e.id!,
+        id: e.id,
         summary: e.summary || 'InnerPeace Session',
         startsAt: e.start?.dateTime || e.start?.date || null,
         endsAt: e.end?.dateTime || e.end?.date || null,
         meetingUrl,
         location: e.location || null,
-        status: (e.status as any) || 'confirmed',
+        status: e.status || 'confirmed',
       };
     });
 
@@ -124,7 +160,7 @@ app.get('/api/bookings', async (req, res) => {
 /**
  * POST /api/book
  * body: { start, end, email?, name?, mode: 'virtual'|'inperson', location? }
- * Creates on the manager calendar (CALENDAR_ID).
+ * Creates on the MANAGER calendar.
  */
 app.post('/api/book', async (req, res) => {
   try {
@@ -199,7 +235,7 @@ app.delete('/api/book/:id', async (req, res) => {
 });
 
 /**
- * PUT /api/book/:id  (move/amend)
+ * PUT /api/book/:id
  * body: { start, end, location? }
  */
 app.put('/api/book/:id', async (req, res) => {
