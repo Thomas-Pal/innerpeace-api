@@ -4,22 +4,22 @@ options:
 timeout: "1200s"
 
 steps:
-  - name: gcr.io/cloud-builders/docker
+  - id: build-and-push
+    name: gcr.io/cloud-builders/docker
     entrypoint: bash
     args:
       - -ceu
       - |
         set -o pipefail
         TAG="${BUILD_ID:-local-$(date +%s)}"
-        REG="europe-west2-docker.pkg.dev"
-        REPO="innerpeace"
-        IMG="${REG}/${PROJECT_ID}/${REPO}/innerpeace-api:${TAG}"
+        IMG="europe-west2-docker.pkg.dev/${PROJECT_ID}/innerpeace/innerpeace-api:${TAG}"
         echo "Building ${IMG}"
         docker build -t "${IMG}" .
         docker push "${IMG}"
         printf '%s' "${IMG}" > /workspace/IMG.txt
 
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
     args:
       - -ceu
@@ -35,5 +35,5 @@ steps:
           --max-instances 20 \
           --concurrency 80 \
           --timeout 240 \
-          --update-secrets "CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest" \
+          --update-secrets CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest \
           --no-allow-unauthenticated
