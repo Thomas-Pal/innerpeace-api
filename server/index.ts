@@ -1,7 +1,7 @@
 import cors from 'cors';
 import 'dotenv/config';
 import express from 'express';
-import { google } from 'googleapis';
+import { google, calendar_v3 } from 'googleapis';
 
 const app = express();
 app.use(cors());
