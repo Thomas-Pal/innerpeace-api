@@ -39,9 +39,8 @@ steps:
           --max-instances 20 \
           --concurrency 80 \
           --timeout 240 \
-          --update-env-vars "AUTH_MODE=keyless-dwd" \
-          --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,GOOGLE_DELEGATED_USER=GOOGLE_DELEGATED_USER:latest,USE_MEET=USE_MEET:latest" \
-          --allow-unauthenticated
+          --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest" \
+          --no-allow-unauthenticated
 YAML
 
 
