@@ -11,7 +11,9 @@ steps:
       - |
         set -o pipefail
         TAG="${BUILD_ID:-local-$(date +%s)}"
-        IMG="europe-west2-docker.pkg.dev/$PROJECT_ID/innerpeace/innerpeace-api:${TAG}"
+        REG="europe-west2-docker.pkg.dev"
+        REPO="innerpeace"
+        IMG="${REG}/${PROJECT_ID}/${REPO}/innerpeace-api:${TAG}"
         echo "Building ${IMG}"
         docker build -t "${IMG}" .
         docker push "${IMG}"
@@ -27,11 +29,11 @@ steps:
         gcloud run deploy innerpeace-api \
           --region europe-west2 \
           --image "${IMG}" \
-          --service-account "run-innerpeace-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+          --service-account "run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
           --port 8080 \
           --min-instances 1 \
           --max-instances 20 \
           --concurrency 80 \
           --timeout 240 \
-          --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest" \
+          --update-secrets "CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest" \
           --no-allow-unauthenticated
