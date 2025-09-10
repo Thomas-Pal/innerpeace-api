@@ -1,14 +1,9 @@
-cat > cloudbuild.yaml <<'YAML'
-# cloudbuild.yaml — minimal, safe, manual-build friendly.
-# No custom substitutions. Builds, pushes, then deploys to Cloud Run.
-
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
 timeout: "1200s"
 
 steps:
-  # 1) Build + push (compute a tag inside bash, never in top-level YAML)
   - name: gcr.io/cloud-builders/docker
     entrypoint: bash
     args:
@@ -22,7 +17,6 @@ steps:
         docker push "${IMG}"
         printf '%s' "${IMG}" > /workspace/IMG.txt
 
-  # 2) Deploy the pushed image
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
     args:
@@ -41,6 +35,3 @@ steps:
           --timeout 240 \
           --set-secrets "CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest" \
           --no-allow-unauthenticated
-YAML
-
-
