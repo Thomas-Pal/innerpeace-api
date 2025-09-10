@@ -134,10 +134,6 @@ app.post('/api/book', async (req, res) => {
         description: name ? `Coaching session with ${name}` : 'Coaching session',
         start: { dateTime: start },
         end: { dateTime: end },
-        attendees: email ? [{ email }] : undefined,
-
-
-
         attendees: [
       { email: email ? [{ email }] : undefined},
       { email: process.env.MANAGER_EMAIL || "thomaspal@innerpeace-developer.co.uk", displayName: "InnerPeace Manager (Simon)" }
