@@ -12,11 +12,11 @@ steps:
       - |
         set -o pipefail
         TAG="${BUILD_ID:-local-$(date +%s)}"
-        IMG="europe-west2-docker.pkg.dev/${PROJECT_ID}/innerpeace/innerpeace-api:${TAG}"
-        echo "Building ${IMG}"
-        docker build -t "${IMG}" .
-        docker push "${IMG}"
-        printf '%s' "${IMG}" > /workspace/IMG.txt
+        IMG="europe-west2-docker.pkg.dev/${PROJECT_ID}/innerpeace/innerpeace-api:$${TAG}"
+        echo "Building $${IMG}"
+        docker build -t "$${IMG}" .
+        docker push "$${IMG}"
+        printf '%s' "$${IMG}" > /workspace/IMG.txt
 
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -28,7 +28,7 @@ steps:
         IMG="$(cat /workspace/IMG.txt)"
         gcloud run deploy innerpeace-api \
           --region europe-west2 \
-          --image "${IMG}" \
+          --image "$${IMG}" \
           --service-account "run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
           --port 8080 \
           --min-instances 1 \
