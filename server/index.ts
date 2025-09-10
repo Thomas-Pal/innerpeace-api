@@ -7,30 +7,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/**
- * ENV you can set:
- * - PORT                       (default 8080)
- * - CALENDAR_ID                calendar to read/write (default 'primary')
- * - MANAGER_CALENDAR_ID        if set, we read availability + create events here
- * - MANAGER_EMAIL              the manager’s email to always invite
- * - USE_MEET                   'auto' | 'always' | 'never'  (default 'auto')
- * - SEND_UPDATES               'all' | 'externalOnly' | 'none'  (default 'all')
- */
 const {
   PORT = '8080',
-  CALENDAR_ID = 'primary',
-  MANAGER_CALENDAR_ID = '',
-  MANAGER_EMAIL = 'thomaspal@innerpeace-developer.co.uk',
-  USE_MEET = 'auto', // 'auto' | 'always' | 'never'
-  SEND_UPDATES = 'all',
-} = process.env as Record<string, string>;
 
-// Where we read availability from and where we create/list bookings
-const TARGET_CAL_ID = MANAGER_CALENDAR_ID || CALENDAR_ID;
+  // ✅ Set this to the MANAGER’s calendar email so availability & listings use it.
+  // Example: CALENDAR_ID=thomaspal@innerpeace-developer.co.uk
+  CALENDAR_ID = 'primary',
+
+  // Optional: control Meet creation
+  USE_MEET = 'auto', // 'auto' | 'always' | 'never'
+
+  // Used as a co-attendee on created events (manager gets the invite)
+  MANAGER_EMAIL = 'thomaspal@innerpeace-developer.co.uk',
+} = process.env as Record<string, string>;
 
 type Authed = { idJwt: string; access: string; userId?: string };
 
-/** Require both the ID token and the OAuth access token (what your Gateway expects). */
 function requireAuth(req: express.Request): Authed {
   const idJwt = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const access = String(req.headers['x-oauth-access-token'] || '');
@@ -52,15 +44,28 @@ function requireAuth(req: express.Request): Authed {
 function calendarClient(accessToken: string) {
   const oAuth2 = new google.auth.OAuth2();
   oAuth2.setCredentials({ access_token: accessToken });
+  google.options({ auth: oAuth2 });
   return google.calendar({ version: 'v3', auth: oAuth2 });
 }
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
+// ---------- Helpers ----------
+function extractMeetUrl(e: calendar_v3.Schema$Event | undefined | null): string | null {
+  if (!e) return null;
+  // Prefer conferenceData entry points; hangoutLink is legacy and not always filled on list()
+  const ep = e.conferenceData?.entryPoints?.find(
+    (p) => p.entryPointType === 'video' || p.entryPointType === 'hangoutsMeet'
+  );
+  return e.hangoutLink || ep?.uri || null;
+}
+
+// ---------- API ----------
+
 /**
  * GET /api/availability?start=ISO&end=ISO
- * Returns busy windows (start/end) for the target calendar (manager by default).
- * Requires Authorization: Bearer <id_token> and x-oauth-access-token: <access>
+ * Uses CALENDAR_ID (manager’s calendar).
+ * Requires the manager calendar to be shared at least as free/busy to the public or your domain.
  */
 app.get('/api/availability', async (req, res) => {
   try {
@@ -77,31 +82,32 @@ app.get('/api/availability', async (req, res) => {
       requestBody: {
         timeMin,
         timeMax,
-        items: [{ id: MANAGER_CALENDAR_ID || 'primary' }], // always manager
-
+        items: [{ id: CALENDAR_ID }],
       },
     });
 
-    // FreeBusy returns busy windows. UI expects {items:[{start,end}]}.
-    const busy =
-      (fb.data.calendars?.[TARGET_CAL_ID as 'primary'] as any)?.busy ??
-      (fb.data.calendars?.primary as any)?.busy ??
-      [];
+    const calendars = fb.data.calendars || {};
+    const fbCal =
+      calendars[CALENDAR_ID] ||
+      calendars['primary'] ||
+      (Object.values(calendars)[0] as any) ||
+      { busy: [] };
 
-    const items = busy.map((b: any) => ({ start: b.start, end: b.end }));
-    return res.json({ items });
+    const busy = (fbCal as any)?.busy ?? [];
+    const items = Array.isArray(busy) ? busy.map((b: any) => ({ start: b.start, end: b.end })) : [];
+
+    res.json({ items });
   } catch (e: any) {
-    const details = e?.response?.data?.error?.message || e?.message || 'freebusy_failed';
+    const code = e?.response?.status || 500;
+    const details = e?.response?.data || e?.message || 'freebusy_failed';
     console.error('freebusy_failed', details);
-    const status = e?.status || 500;
-    return res.status(status).json({ error: 'freebusy_failed' });
+    res.status(code).json({ error: 'freebusy_failed' });
   }
 });
 
 /**
- * GET /api/bookings?uid=<googleSub>
- * Lists upcoming bookings we created on the target calendar.
- * NOTE: The UI expects fields 'start' and 'end' — not 'startsAt/endsAt'.
+ * GET /api/bookings?uid=googleSub
+ * Lists upcoming app-created sessions in the MANAGER calendar.
  */
 app.get('/api/bookings', async (req, res) => {
   try {
@@ -109,40 +115,44 @@ app.get('/api/bookings', async (req, res) => {
     const cal = calendarClient(access);
 
     const now = new Date().toISOString();
+
+    // Ask for conferenceData so Meet URL is stable on refresh
     const events = await cal.events.list({
-      calendarId: TARGET_CAL_ID,
+      calendarId: CALENDAR_ID,
       timeMin: now,
       singleEvents: true,
       orderBy: 'startTime',
       q: 'InnerPeace Session',
       maxResults: 50,
+      // conferenceDataVersion isn't in some TS types for list(), but the API supports it.
+      ...( { conferenceDataVersion: 1 } as any ),
+      // Optional: trim payload
+      fields:
+        'items(id,summary,start,end,location,hangoutLink,conferenceData(entryPoints,conferenceSolution))',
     });
 
     const items =
       (events.data.items || []).map((e) => ({
         id: e.id!,
-        summary: e.summary || null,
-        // 👇 Match front-end: 'start' / 'end'
-        start: e.start?.dateTime || e.start?.date || null,
-        end: e.end?.dateTime || e.end?.date || null,
-        meetingUrl: e.hangoutLink || null,
+        summary: e.summary,
+        startsAt: e.start?.dateTime || e.start?.date || null,
+        endsAt: e.end?.dateTime || e.end?.date || null,
+        meetingUrl: extractMeetUrl(e),
         location: e.location || null,
       })) ?? [];
 
-    return res.json({ ok: true, items });
+    res.json({ ok: true, items });
   } catch (e: any) {
     const details = e?.response?.data?.error?.message || e?.message || 'list_bookings_failed';
     console.error('list_bookings_failed', details);
-    const status = e?.status || 500;
-    return res.status(status).json({ ok: false, error: 'list_bookings_failed' });
+    res.status(500).json({ ok: false, error: 'list_bookings_failed' });
   }
 });
 
 /**
  * POST /api/book
- * body: { start: ISO, end: ISO, email?: string, name?: string, mode: 'virtual'|'inperson', location?: string }
- * Creates the booking on the target (manager) calendar, invites the user + manager,
- * and (optionally) creates a Google Meet.
+ * body: { start, end, email?, name?, mode: 'virtual'|'inperson', location? }
+ * Creates the meeting on the MANAGER calendar (CALENDAR_ID).
  */
 app.post('/api/book', async (req, res) => {
   try {
@@ -159,49 +169,81 @@ app.post('/api/book', async (req, res) => {
         ? false
         : String(mode || '').toLowerCase() === 'virtual';
 
-    // Build attendees cleanly
     const attendees: calendar_v3.Schema$EventAttendee[] = [];
     if (email) attendees.push({ email });
-    if (MANAGER_EMAIL && (!email || email !== MANAGER_EMAIL)) {
-      attendees.push({
-        email: MANAGER_EMAIL,
-        displayName: 'InnerPeace Manager',
-        responseStatus: 'accepted',
-      });
-    }
+    attendees.push({
+      email: MANAGER_EMAIL,
+      displayName: 'InnerPeace Manager (Simon)',
+    });
 
     const created = await cal.events.insert({
-      calendarId: TARGET_CAL_ID,
+      calendarId: CALENDAR_ID,
       conferenceDataVersion: wantMeet ? 1 : 0,
-      sendUpdates: (SEND_UPDATES as any) || 'all',
       requestBody: {
         summary: 'InnerPeace Session',
         description: name ? `Coaching session with ${name}` : 'Coaching session',
         start: { dateTime: start },
         end: { dateTime: end },
-        attendees: attendees.length ? attendees : undefined,
-        // Only set a physical location for in-person sessions
-        location: !wantMeet ? (location || undefined) : undefined,
+        attendees,
+        location: !wantMeet ? (location || 'TBD') : undefined,
         conferenceData: wantMeet
-          ? { createRequest: { requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2)}` } }
+          ? { createRequest: { requestId: `meet-${Date.now()}` } }
           : undefined,
-        guestsCanModify: false,
-        guestsCanInviteOthers: false,
-        guestsCanSeeOtherGuests: true,
-        transparency: 'opaque',
       },
+      // Optional: email notifications
+      sendUpdates: 'all',
     });
 
-    return res.json({
+    res.json({
       ok: true,
       id: created.data.id,
-      meetingUrl: created.data.hangoutLink || null,
+      meetingUrl: extractMeetUrl(created.data),
     });
   } catch (e: any) {
     const details = e?.response?.data?.error?.message || e?.message || 'booking_failed';
     console.error('booking_failed', details);
-    const status = e?.status || 500;
-    return res.status(status).json({ error: 'booking_failed', details });
+    res.status(500).json({ error: 'booking_failed', details });
+  }
+});
+
+/**
+ * PUT /api/book/:id  (move/amend)
+ * body: { start, end, location? }
+ */
+app.put('/api/book/:id', async (req, res) => {
+  try {
+    const { access } = requireAuth(req);
+    const cal = calendarClient(access);
+    const id = String(req.params.id);
+    if (!id) return res.status(400).json({ error: 'missing_id' });
+
+    const { start, end, location } = req.body || {};
+    if (!start || !end) return res.status(400).json({ error: 'missing_dates' });
+
+    const updated = await cal.events.patch({
+      calendarId: CALENDAR_ID,
+      eventId: id,
+      requestBody: {
+        start: { dateTime: start },
+        end: { dateTime: end },
+        location: location ?? undefined,
+      },
+      ...( { conferenceDataVersion: 1 } as any ),
+      fields:
+        'id,start,end,location,hangoutLink,conferenceData(entryPoints,conferenceSolution)',
+    });
+
+    res.json({
+      ok: true,
+      eventId: updated.data.id,
+      start: updated.data.start?.dateTime || updated.data.start?.date,
+      end: updated.data.end?.dateTime || updated.data.end?.date,
+      location: updated.data.location || null,
+      meetingUrl: extractMeetUrl(updated.data),
+    });
+  } catch (e: any) {
+    console.error('amend_failed:', e?.response?.data || e?.message || e);
+    res.status(500).json({ ok: false, error: 'amend_failed' });
   }
 });
 
@@ -212,65 +254,21 @@ app.delete('/api/book/:id', async (req, res) => {
   try {
     const { access } = requireAuth(req);
     const cal = calendarClient(access);
-    const id = String(req.params.id || '');
+    const id = String(req.params.id);
     if (!id) return res.status(400).json({ error: 'missing_id' });
 
     await cal.events.delete({
-      calendarId: TARGET_CAL_ID,
+      calendarId: CALENDAR_ID,
       eventId: id,
-      sendUpdates: (SEND_UPDATES as any) || 'all',
+      sendUpdates: 'all',
     });
 
-    return res.json({ ok: true });
+    res.json({ ok: true });
   } catch (e: any) {
     console.error('cancel_failed:', e?.response?.data || e?.message || e);
-    const status = e?.status || 500;
-    return res.status(status).json({ ok: false, error: 'cancel_failed' });
-  }
-});
-
-/**
- * PUT /api/book/:id  (move/amend)
- * body: { start: ISO, end: ISO, location?: string }
- */
-app.put('/api/book/:id', async (req, res) => {
-  try {
-    const { access } = requireAuth(req);
-    const cal = calendarClient(access);
-    const id = String(req.params.id || '');
-    if (!id) return res.status(400).json({ error: 'missing_id' });
-
-    const { start, end, location } = req.body || {};
-    if (!start || !end) return res.status(400).json({ error: 'missing_dates' });
-
-    const updated = await cal.events.patch({
-      calendarId: TARGET_CAL_ID,
-      eventId: id,
-      sendUpdates: (SEND_UPDATES as any) || 'all',
-      requestBody: {
-        start: { dateTime: start },
-        end: { dateTime: end },
-        location: location ?? undefined,
-      },
-    });
-
-    return res.json({
-      ok: true,
-      eventId: updated.data.id,
-      start: updated.data.start?.dateTime || updated.data.start?.date,
-      end: updated.data.end?.dateTime || updated.data.end?.date,
-      location: updated.data.location || null,
-    });
-  } catch (e: any) {
-    console.error('amend_failed:', e?.response?.data || e?.message || e);
-    const status = e?.status || 500;
-    return res.status(status).json({ ok: false, error: 'amend_failed' });
+    res.status(500).json({ ok: false, error: 'cancel_failed' });
   }
 });
 
 const port = Number(PORT) || 8080;
-app.listen(port, '0.0.0.0', () => {
-  console.log(`API listening on :${port}`);
-  console.log(`Target calendar: ${TARGET_CAL_ID}`);
-  if (MANAGER_EMAIL) console.log(`Manager email:   ${MANAGER_EMAIL}`);
-});
+app.listen(port, '0.0.0.0', () => console.log(`API listening on :${port}`));
