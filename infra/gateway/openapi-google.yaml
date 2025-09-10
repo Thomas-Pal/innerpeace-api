@@ -6,6 +6,10 @@ schemes: ["https"]
 consumes: [application/json]
 produces: [application/json]
 
+x-google-endpoints:
+  - name: innerpeace-gw-4ubziwcf.nw.gateway.dev
+    allowCors: true
+
 securityDefinitions:
   google_jwt:
     type: oauth2
@@ -13,7 +17,10 @@ securityDefinitions:
     flow: implicit
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
-    x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com, 379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
+    # IMPORTANT: include *every* client ID that can mint your ID token
+    x-google-audiences: >
+      379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,
+      379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com
 
 paths:
   /health:
