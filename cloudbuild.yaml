@@ -1,11 +1,10 @@
-
+# cloudbuild.yaml
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
 timeout: "1200s"
 
 steps:
-  # 1) Build & push image to Artifact Registry
   - id: build-and-push
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
@@ -24,7 +23,7 @@ steps:
         docker push "${IMG}"
         printf '%s' "${IMG}" > /workspace/IMG.txt
 
-  # 2) If USE_MEET was ever secret-backed, remove that mapping first (no-op if absent)
+  # If USE_MEET was ever secret-backed, remove that mapping first (safe no-op)
   - id: pre-clean-secret-mapping
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
@@ -35,7 +34,6 @@ steps:
           --region=europe-west2 --project="${PROJECT_ID}" \
           --remove-secrets=USE_MEET || true
 
-  # 3) Deploy with USE_MEET as a literal (stable lane)
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
