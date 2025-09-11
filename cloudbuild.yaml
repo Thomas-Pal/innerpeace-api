@@ -1,39 +1,39 @@
-options:
-  logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8
-timeout: "1200s"
+# cloudbuild.yaml (deploy section)
+
+substitutions:
+  _SERVICE: innerpeace-api
+  _REGION: europe-west2
+  # your built image tag; keep your existing build that sets this
+  _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/apps/innerpeace-api:$SHORT_SHA
+  _USE_MEET_SECRET: use-meet-prod
 
 steps:
-  - id: build-and-push
-    name: gcr.io/cloud-builders/docker
-    entrypoint: bash
-    args:
-      - -ceu
-      - |
-        set -o pipefail
-        TAG="${BUILD_ID:-local-$(date +%s)}"
-        IMG="europe-west2-docker.pkg.dev/${PROJECT_ID}/innerpeace/innerpeace-api:$${TAG}"
-        echo "Building $${IMG}"
-        docker build -t "$${IMG}" .
-        docker push "$${IMG}"
-        printf '%s' "$${IMG}" > /workspace/IMG.txt
+  # --- your build & push steps remain unchanged ---
+  # e.g. docker build/push or pack build
 
-  - id: deploy
-    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  # PRE-CLEAN: if USE_MEET is currently a literal, remove it (ignore errors)
+  - name: gcr.io/cloud-builders/gcloud
+    id: pre-clean-env
     entrypoint: bash
     args:
-      - -ceu
-      - |
-        set -o pipefail
-        IMG="$(cat /workspace/IMG.txt)"
-        gcloud run deploy innerpeace-api \
-          --region europe-west2 \
-          --image "$${IMG}" \
-          --service-account "run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
-          --port 8080 \
-          --min-instances 1 \
-          --max-instances 20 \
-          --concurrency 80 \
-          --timeout 240 \
-          --update-secrets CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest \
-          --no-allow-unauthenticated
+      - -c
+      - >
+        gcloud run services update "$_SERVICE"
+        --region="$_REGION" --project="$PROJECT_ID"
+        --remove-env-vars=USE_MEET || true
+
+  # DEPLOY: set USE_MEET from Secret Manager (never a literal again)
+  - name: gcr.io/cloud-builders/gcloud
+    id: deploy
+    args:
+      [
+        "run","deploy","$_SERVICE",
+        "--image","$_IMAGE",
+        "--region","$_REGION",
+        "--project","$PROJECT_ID",
+        "--set-secrets","USE_MEET=${_USE_MEET_SECRET}:latest",
+        "--update-env-vars","SEND_UPDATES=all,GOOGLE_DELEGATED_USER=thomaspal@innerpeace-developer.co.uk,MANAGER_CALENDAR_ID=thomaspal@innerpeace-developer.co.uk"
+      ]
+
+images:
+  - $_IMAGE
