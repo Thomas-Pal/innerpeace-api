@@ -2,12 +2,14 @@
 import { google, calendar_v3 } from 'googleapis';
 import https from 'node:https';
 import { URLSearchParams } from 'node:url';
+import { OAuth2Client } from 'google-auth-library';
 
 type TokenCache = { accessToken: string; expiry: number };
 let cache: TokenCache | null = null;
 
 /**
  * Exchange a signed JWT (with sub=delegated user) for an OAuth2 access token.
+ * No private keys in your app; we rely on IAM Credentials signJwt.
  */
 async function exchangeJwtForAccessToken(assertion: string): Promise<{ access_token: string; expires_in: number }> {
   const body = new URLSearchParams({
@@ -49,17 +51,16 @@ async function exchangeJwtForAccessToken(assertion: string): Promise<{ access_to
   });
 }
 
-function oauthFromAccessToken(token: string) {
-  const o = new google.auth.OAuth2();
+function oauthFromAccessToken(token: string): OAuth2Client {
+  const o = new OAuth2Client();
   o.setCredentials({ access_token: token });
   return o;
 }
 
 /**
- * Keyless Domain-Wide Delegation:
- * - RUNTIME_SA (Cloud Run) must have roles/iam.serviceAccountTokenCreator on DWD_SA.
- * - We call IAM Credentials signJwt() for DWD_SA, with sub = GOOGLE_DELEGATED_USER,
- *   scope = Calendar, then exchange for an access token and build a Calendar client.
+ * Keyless Domain-Wide Delegation (DWD):
+ *   - Cloud Run runtime SA must have roles/iam.serviceAccountTokenCreator on DWD_SA_EMAIL.
+ *   - Workspace Admin must grant DWD to the DWD SA's OAuth2 client ID for Calendar scope.
  *
  * Required env:
  *   DWD_SA_EMAIL            e.g. calendar-dwd@innerpeace-app-471115.iam.gserviceaccount.com
@@ -67,7 +68,7 @@ function oauthFromAccessToken(token: string) {
  */
 export default async function getCalendarClient(): Promise<calendar_v3.Calendar> {
   const delegatedUser = process.env.GOOGLE_DELEGATED_USER;
-  const dwdSaEmail = process.env.DWD_SA_EMAIL || process.env.GOOGLE_DWD_SA_EMAIL; // accept either name
+  const dwdSaEmail = process.env.DWD_SA_EMAIL || process.env.GOOGLE_DWD_SA_EMAIL; // support either name
   if (!delegatedUser) throw new Error('Missing GOOGLE_DELEGATED_USER');
   if (!dwdSaEmail) throw new Error('Missing DWD_SA_EMAIL');
 
@@ -76,16 +77,16 @@ export default async function getCalendarClient(): Promise<calendar_v3.Calendar>
     return google.calendar({ version: 'v3', auth: oauthFromAccessToken(cache.accessToken) });
   }
 
-  // Auth to call IAM Credentials API as the Cloud Run runtime SA
-  const baseAuth = await new google.auth.GoogleAuth({
+  // Use a GoogleAuth *instance* (what google.options() wants), not a concrete client.
+  const auth = new google.auth.GoogleAuth({
     scopes: [
       'https://www.googleapis.com/auth/iam',            // signJwt
-      'https://www.googleapis.com/auth/cloud-platform', // safe superset
+      'https://www.googleapis.com/auth/cloud-platform', // broad but fine on Cloud Run
     ],
-  }).getClient();
-  google.options({ auth: baseAuth });
+  });
+  google.options({ auth }); // <- satisfies TS types for NodeNext
 
-  // Build the JWT claims for the OAuth assertion
+  // Build JWT claims to impersonate the manager (delegatedUser)
   const claims = {
     iss: dwdSaEmail,
     sub: delegatedUser,
@@ -95,9 +96,9 @@ export default async function getCalendarClient(): Promise<calendar_v3.Calendar>
     exp: nowSec + 3600,
   };
 
-  // Ask IAM to sign the JWT with the DWD SA's system-managed key (no private key in app)
-  const name = `projects/-/serviceAccounts/${dwdSaEmail}`;
+  // Ask IAM Credentials to sign the JWT using the DWD SA's system-managed key
   const iam = google.iamcredentials('v1');
+  const name = `projects/-/serviceAccounts/${dwdSaEmail}`;
   const signed = await iam.projects.serviceAccounts.signJwt({
     name,
     requestBody: { payload: JSON.stringify(claims) },
@@ -105,7 +106,7 @@ export default async function getCalendarClient(): Promise<calendar_v3.Calendar>
   const signedJwt = signed.data.signedJwt;
   if (!signedJwt) throw new Error('signJwt_failed: no signedJwt returned');
 
-  // Exchange the signed JWT for an access token scoped for Calendar, on behalf of delegatedUser
+  // Exchange for an access token scoped for Calendar, on behalf of the delegated user
   const token = await exchangeJwtForAccessToken(signedJwt);
   cache = { accessToken: token.access_token, expiry: nowSec + token.expires_in };
 
