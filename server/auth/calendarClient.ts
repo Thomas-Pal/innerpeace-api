@@ -1,15 +1,16 @@
 // server/auth/calendarClient.ts
 import { google, calendar_v3 } from 'googleapis';
+import fs from 'node:fs';
 
 /**
  * Domain-Wide Delegation (DWD) Calendar client.
  * Impersonates GOOGLE_DELEGATED_USER (the manager) using a service account key.
  *
  * Required env:
- * - GOOGLE_DELEGATED_USER            // e.g. thomaspal@innerpeace-developer.co.uk
+ * - GOOGLE_DELEGATED_USER              // e.g. thomaspal@innerpeace-developer.co.uk
  * - Either:
- *     GOOGLE_DWD_SA_KEY_JSON         // full JSON key as a string (recommended via Secret Manager)
- *   OR GOOGLE_DWD_SA_KEY_PATH        // filesystem path to the JSON key (mounted secret)
+ *     GOOGLE_DWD_SA_KEY_JSON           // full JSON key as a string (recommended via Secret Manager)
+ *   OR GOOGLE_DWD_SA_KEY_PATH          // filesystem path to the JSON key (mounted secret)
  */
 const SCOPE = 'https://www.googleapis.com/auth/calendar';
 
@@ -18,17 +19,11 @@ let cached: calendar_v3.Calendar | null = null;
 function readSaKey(): { client_email: string; private_key: string } {
   const json = process.env.GOOGLE_DWD_SA_KEY_JSON;
   if (json) {
-    try {
-      const parsed = JSON.parse(json);
-      return { client_email: parsed.client_email, private_key: parsed.private_key };
-    } catch {
-      throw new Error('GOOGLE_DWD_SA_KEY_JSON is not valid JSON');
-    }
+    const parsed = JSON.parse(json);
+    return { client_email: parsed.client_email, private_key: parsed.private_key };
   }
   const path = process.env.GOOGLE_DWD_SA_KEY_PATH;
   if (!path) throw new Error('Missing GOOGLE_DWD_SA_KEY_JSON or GOOGLE_DWD_SA_KEY_PATH');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require('fs') as typeof import('fs');
   const raw = fs.readFileSync(path, 'utf8');
   const parsed = JSON.parse(raw);
   return { client_email: parsed.client_email, private_key: parsed.private_key };
@@ -46,7 +41,7 @@ export default async function getCalendarClient(): Promise<calendar_v3.Calendar>
     email: client_email,
     key: private_key,
     scopes: [SCOPE],
-    subject: delegatedUser, // <- impersonate manager
+    subject: delegatedUser, // impersonate manager
   });
 
   cached = google.calendar({ version: 'v3', auth: jwt });
