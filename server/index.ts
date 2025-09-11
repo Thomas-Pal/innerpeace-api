@@ -2,6 +2,7 @@ import cors from 'cors';
 import 'dotenv/config';
 import express from 'express';
 import { google, calendar_v3 } from 'googleapis';
+import getCalendarClient from './auth/calendarClient';
 
 const app = express();
 app.use(cors());
@@ -11,15 +12,14 @@ app.use(express.json());
  * ENV:
  * - PORT
  * - CALENDAR_ID                (default 'primary')
- * - MANAGER_CALENDAR_ID        (set to manager email for manager mode)
+ * - MANAGER_CALENDAR_ID        (should be the manager's email)
  * - MANAGER_EMAIL              (always invite this address)
  * - USE_MEET                   'auto' | 'always' | 'never' (default 'auto')
  * - SEND_UPDATES               'all' | 'externalOnly' | 'none' (default 'all')
  *
- * Manager OAuth (optional, recommended for “hardcoded manager”):
- * - GOOGLE_CLIENT_ID
- * - GOOGLE_CLIENT_SECRET
- * - GOOGLE_REFRESH_TOKEN       (refresh token for the MANAGER account)
+ * DWD auth (required):
+ * - GOOGLE_DELEGATED_USER      (e.g. thomaspal@innerpeace-developer.co.uk)
+ * - GOOGLE_DWD_SA_KEY_JSON or GOOGLE_DWD_SA_KEY_PATH
  */
 const {
   PORT = '8080',
@@ -28,57 +28,44 @@ const {
   MANAGER_EMAIL = 'thomaspal@innerpeace-developer.co.uk',
   USE_MEET = 'auto',
   SEND_UPDATES = 'all',
+} = process.env as Record<string, string>;
 
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  GOOGLE_REFRESH_TOKEN,
-} = process.env as Record<string, string | undefined>;
+const TARGET_CAL_ID = MANAGER_CALENDAR_ID || CALENDAR_ID;
 
-// Where we read availability from and where we create/list bookings
-const TARGET_CAL_ID = (MANAGER_CALENDAR_ID || CALENDAR_ID)!;
-
-type Authed = { idJwt: string; access?: string; userId?: string };
-
+type Authed = { idJwt: string; userId?: string };
 function requireAuth(req: express.Request): Authed {
   const idJwt = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  const access = (req.headers['x-oauth-access-token'] as string | undefined) || undefined;
   const userId = (req.headers['x-user-id'] as string | undefined) || undefined;
-
   if (!idJwt) {
     const err: any = new Error('Missing ID token');
     err.status = 401;
     throw err;
   }
-  return { idJwt, access, userId };
+  return { idJwt, userId };
 }
 
-/** Returns a calendar client + mode: 'manager' if using manager refresh token, else 'user'. */
-async function getCalendarClient(accessToken?: string): Promise<{ cal: calendar_v3.Calendar; mode: 'manager' | 'user' }> {
-  // Manager OAuth mode (hardcoded manager) takes precedence if env is present
-  if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REFRESH_TOKEN) {
-    const oAuth2 = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
-    oAuth2.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-    return { cal: google.calendar({ version: 'v3', auth: oAuth2 }), mode: 'manager' };
-  }
-
-  // Fallback: use the caller's access token (PoC-compatible but permission-sensitive)
-  if (!accessToken) {
-    const err: any = new Error('Missing OAuth access token');
-    err.status = 401;
-    throw err;
-  }
-  const oAuth2 = new google.auth.OAuth2();
-  oAuth2.setCredentials({ access_token: accessToken });
-  return { cal: google.calendar({ version: 'v3', auth: oAuth2 }), mode: 'user' };
+function pickMeetUrl(ev: any): string | null {
+  const ep = ev?.conferenceData?.entryPoints;
+  const fromEp =
+    Array.isArray(ep) && ep.find((x: any) => x?.entryPointType === 'video')?.uri;
+  return ev?.hangoutLink || fromEp || null;
 }
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, targetCalendar: TARGET_CAL_ID }));
+app.get('/healthz', async (_req, res) => {
+  try {
+    // smoke-test the DWD client init
+    await getCalendarClient();
+    res.json({ ok: true, targetCalendar: TARGET_CAL_ID, auth: 'DWD' });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || 'init_failed' });
+  }
+});
 
 // ---------------------- Availability (FreeBusy) ------------------------------
 app.get('/api/availability', async (req, res) => {
   try {
-    const { access } = requireAuth(req);
-    const { cal } = await getCalendarClient(access);
+    requireAuth(req); // app-level auth only
+    const cal = await getCalendarClient();
 
     const timeMin = String(req.query.start || '');
     const timeMax = String(req.query.end || '');
@@ -88,14 +75,13 @@ app.get('/api/availability', async (req, res) => {
       requestBody: {
         timeMin,
         timeMax,
-        items: [{ id: TARGET_CAL_ID }], // ask for the manager calendar explicitly
+        items: [{ id: TARGET_CAL_ID }], // ask for manager calendar explicitly
       },
     });
 
-    // IMPORTANT: index by the EXACT id we asked for. No fallback to 'primary'.
+    // IMPORTANT: index by EXACT id requested; never fall back to 'primary'
     const calEntry = (fb.data.calendars as any)?.[TARGET_CAL_ID];
     if (!calEntry) {
-      // Permission or bad id — do NOT fall back to caller's primary.
       return res.status(403).json({
         error: 'no_access_to_calendar',
         calendarId: TARGET_CAL_ID,
@@ -116,10 +102,10 @@ app.get('/api/availability', async (req, res) => {
 });
 
 // ---------------------- List bookings ---------------------------------------
-app.get('/api/bookings', async (req, res) => {
+app.get('/api/bookings', async (_req, res) => {
   try {
-    const { access } = requireAuth(req);
-    const { cal } = await getCalendarClient(access);
+    requireAuth(_req);
+    const cal = await getCalendarClient();
 
     const now = new Date().toISOString();
     const events = await cal.events.list({
@@ -127,7 +113,6 @@ app.get('/api/bookings', async (req, res) => {
       timeMin: now,
       singleEvents: true,
       orderBy: 'startTime',
-      // Tip: removing q-filter avoids hiding events created elsewhere
       maxResults: 50,
     });
 
@@ -157,8 +142,8 @@ app.get('/api/bookings', async (req, res) => {
 // ---------------------- Create booking --------------------------------------
 app.post('/api/book', async (req, res) => {
   try {
-    const { access } = requireAuth(req);
-    const { cal } = await getCalendarClient(access);
+    requireAuth(req);
+    const cal = await getCalendarClient();
 
     const { start, end, email, name, mode, location } = req.body || {};
     if (!start || !end) return res.status(400).json({ error: 'missing_dates' });
@@ -173,7 +158,11 @@ app.post('/api/book', async (req, res) => {
     const attendees: calendar_v3.Schema$EventAttendee[] = [];
     if (email) attendees.push({ email, displayName: name || undefined });
     if (MANAGER_EMAIL && (!email || email !== MANAGER_EMAIL)) {
-      attendees.push({ email: MANAGER_EMAIL, displayName: 'InnerPeace Manager', responseStatus: 'accepted' });
+      attendees.push({
+        email: MANAGER_EMAIL,
+        displayName: 'InnerPeace Manager',
+        responseStatus: 'accepted',
+      });
     }
 
     const created = await cal.events.insert({
@@ -212,8 +201,8 @@ app.post('/api/book', async (req, res) => {
 // ---------------------- Cancel booking --------------------------------------
 app.delete('/api/book/:id', async (req, res) => {
   try {
-    const { access } = requireAuth(req);
-    const { cal } = await getCalendarClient(access);
+    requireAuth(req);
+    const cal = await getCalendarClient();
 
     const id = String(req.params.id || '');
     if (!id) return res.status(400).json({ error: 'missing_id' });
@@ -235,8 +224,8 @@ app.delete('/api/book/:id', async (req, res) => {
 // ---------------------- Amend booking ---------------------------------------
 app.put('/api/book/:id', async (req, res) => {
   try {
-    const { access } = requireAuth(req);
-    const { cal } = await getCalendarClient(access);
+    requireAuth(req);
+    const cal = await getCalendarClient();
 
     const id = String(req.params.id || '');
     if (!id) return res.status(400).json({ error: 'missing_id' });
@@ -279,6 +268,5 @@ const port = Number(PORT) || 8080;
 app.listen(port, '0.0.0.0', () => {
   console.log(`API listening on :${port}`);
   console.log(`Target calendar: ${TARGET_CAL_ID}`);
-  if (GOOGLE_REFRESH_TOKEN) console.log('Auth mode: MANAGER (refresh token)');
-  else console.log('Auth mode: USER (caller access token)');
+  console.log(`Auth mode: DWD (impersonating ${process.env.GOOGLE_DELEGATED_USER || 'unset'})`);
 });
