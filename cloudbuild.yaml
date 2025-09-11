@@ -1,7 +1,7 @@
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
-  substitutionOption: ALLOW_LOOOSE   # <<< note the three O's? It's actually ALLOW_LOOSE (two O's)
+  substitutionOption: ALLOW_LOOSE
 timeout: "1200s"
 
 steps:
@@ -13,12 +13,11 @@ steps:
       - -ceu
       - |
         set -o pipefail
-        TAG="${SHORT_SHA:-${BUILD_ID:-local-$(date +%s)}}"
-        PROJECT="${PROJECT_ID}"
+        TAG="$${SHORT_SHA:-$${BUILD_ID:-local-$(date +%s)}}"
         REGION="europe-west2"
-        REPO="innerpeace"             # AR repo name
-        SERVICE="innerpeace-api"      # Cloud Run service name
-        IMG="$${REGION}-docker.pkg.dev/$${PROJECT}/$${REPO}/$${SERVICE}:$${TAG}"
+        REPO="innerpeace"              # Artifact Registry repo
+        SERVICE="innerpeace-api"       # Cloud Run service
+        IMG="$${REGION}-docker.pkg.dev/$${PROJECT_ID}/$${REPO}/$${SERVICE}:$${TAG}"
 
         echo "Building $${IMG}"
         docker build -t "$${IMG}" .
@@ -33,10 +32,10 @@ steps:
       - -ceu
       - |
         gcloud run services update innerpeace-api \
-          --region=europe-west2 --project="${PROJECT_ID}" \
+          --region=europe-west2 --project="$${PROJECT_ID}" \
           --remove-secrets=USE_MEET || true
 
-  # 3) Deploy with USE_MEET as a literal (stable, no type flip)
+  # 3) Deploy with USE_MEET as a literal (stable lane, no type flip)
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
@@ -45,9 +44,9 @@ steps:
       - |
         IMG="$(cat /workspace/IMG.txt)"
         gcloud run deploy innerpeace-api \
-          --region=europe-west2 --project="${PROJECT_ID}" \
+          --region=europe-west2 --project="$${PROJECT_ID}" \
           --image "$${IMG}" \
-          --service-account "run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+          --service-account "run-innerpeace-sa@$${PROJECT_ID}.iam.gserviceaccount.com" \
           --port 8080 --min-instances 1 --max-instances 20 --concurrency 80 --timeout 240 \
           --update-env-vars USE_MEET=auto,SEND_UPDATES=all,GOOGLE_DELEGATED_USER=thomaspal@innerpeace-developer.co.uk,MANAGER_CALENDAR_ID=thomaspal@innerpeace-developer.co.uk \
           --no-allow-unauthenticated
