@@ -1,16 +1,11 @@
+# cloudbuild.yaml
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
 timeout: "1200s"
 
-substitutions:
-  _REGION: europe-west2
-  _SERVICE: innerpeace-api
-  _REPO: innerpeace
-  _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
-
 steps:
-  # 1) Build & push the image
+  # 1) Build & push the image (no custom substitutions; compute IMG in bash)
   - id: build-and-push
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
@@ -18,12 +13,17 @@ steps:
       - -ceu
       - |
         set -o pipefail
-        echo "Building $_IMAGE"
-        docker build -t "$_IMAGE" .
-        docker push "$_IMAGE"
-        printf '%s' "$_IMAGE" > /workspace/IMG.txt
+        TAG="${SHORT_SHA:-${BUILD_ID:-local-$(date +%s)}}"
+        REPO="innerpeace"               # <-- Artifact Registry repo name
+        SERVICE="innerpeace-api"        # <-- Cloud Run service name
+        REGION="europe-west2"
+        IMG="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${TAG}"
+        echo "Building ${IMG}"
+        docker build -t "${IMG}" .
+        docker push "${IMG}"
+        printf '%s' "${IMG}" > /workspace/IMG.txt
 
-  # 2) Pre-clean any existing USE_MEET mapping (literal or secret) — SAFE IF NOT PRESENT
+  # 2) Pre-clean any existing USE_MEET mapping (literal or secret). Safe if absent.
   - id: pre-clean-use-meet
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
@@ -31,14 +31,16 @@ steps:
       - -ceu
       - |
         set -o pipefail
-        gcloud run services update "$_SERVICE" \
-          --region="$_REGION" --project="$PROJECT_ID" \
+        SERVICE="innerpeace-api"
+        REGION="europe-west2"
+        gcloud run services update "${SERVICE}" \
+          --region="${REGION}" --project="${PROJECT_ID}" \
           --remove-env-vars=USE_MEET || true
-        gcloud run services update "$_SERVICE" \
-          --region="$_REGION" --project="$PROJECT_ID" \
+        gcloud run services update "${SERVICE}" \
+          --region="${REGION}" --project="${PROJECT_ID}" \
           --remove-secrets=USE_MEET || true
 
-  # 3) Deploy and set USE_MEET from Secret Manager (type stays stable forever)
+  # 3) Deploy; set USE_MEET as a secret-backed env so the type is stable forever
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
@@ -47,14 +49,18 @@ steps:
       - |
         set -o pipefail
         IMG="$(cat /workspace/IMG.txt)"
-        gcloud run deploy "$_SERVICE" \
-          --region "$_REGION" \
-          --image "$IMG" \
-          --service-account "run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+        REGION="europe-west2"
+        SERVICE="innerpeace-api"
+        RUNTIME_SA="run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+        gcloud run deploy "${SERVICE}" \
+          --region "${REGION}" \
+          --image "${IMG}" \
+          --service-account "${RUNTIME_SA}" \
           --port 8080 \
           --min-instances 1 \
           --max-instances 20 \
           --concurrency 80 \
           --timeout 240 \
           --set-secrets USE_MEET=USE_MEET:latest,CALENDAR_ID=CALENDAR_ID:latest \
+          --update-env-vars SEND_UPDATES=all,GOOGLE_DELEGATED_USER=thomaspal@innerpeace-developer.co.uk,MANAGER_CALENDAR_ID=thomaspal@innerpeace-developer.co.uk \
           --no-allow-unauthenticated
