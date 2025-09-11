@@ -1,17 +1,15 @@
-# cloudbuild.yaml (deploy section)
-
+# cloudbuild.yaml — DEPLOY SECTION
 substitutions:
   _SERVICE: innerpeace-api
   _REGION: europe-west2
-  # your built image tag; keep your existing build that sets this
+  # build to AR and deploy this tag (keep your existing build steps)
   _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/apps/innerpeace-api:$SHORT_SHA
   _USE_MEET_SECRET: use-meet-prod
 
 steps:
-  # --- your build & push steps remain unchanged ---
-  # e.g. docker build/push or pack build
+  # ... your build & push steps ...
 
-  # PRE-CLEAN: if USE_MEET is currently a literal, remove it (ignore errors)
+  # Remove literal USE_MEET if present (no-op if not)
   - name: gcr.io/cloud-builders/gcloud
     id: pre-clean-env
     entrypoint: bash
@@ -22,7 +20,7 @@ steps:
         --region="$_REGION" --project="$PROJECT_ID"
         --remove-env-vars=USE_MEET || true
 
-  # DEPLOY: set USE_MEET from Secret Manager (never a literal again)
+  # Deploy with USE_MEET as a secret-backed var (type now stable forever)
   - name: gcr.io/cloud-builders/gcloud
     id: deploy
     args:
