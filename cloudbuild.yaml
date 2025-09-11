@@ -1,21 +1,26 @@
 # cloudbuild.yaml
+# Build+deploy InnerPeace API to Cloud Run via GitHub trigger.
+
 substitutions:
   _REGION: europe-west2
-  _REPO: apps
-  _SERVICE: innerpeace-api
-  _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE:$SHORT_SHA
-  _USE_MEET_SECRET: use-meet-prod
+  _REPO: innerpeace                 # <-- Artifact Registry repo name
+  _SERVICE: innerpeace-api          # <-- Cloud Run service name
+  _USE_MEET_SECRET: use-meet-prod   # <-- Secret Manager secret that holds "auto|always|never"
+  # Image URL we'll build and deploy (uses built-ins $PROJECT_ID and $SHORT_SHA)
+  _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
 
 steps:
-  # Build container
+  # 1) Build container image from the Dockerfile at repo root (adjust "." if needed)
   - name: gcr.io/cloud-builders/docker
+    id: build
     args: ["build", "-t", "$_IMAGE", "."]
 
-  # Push to Artifact Registry
+  # 2) Push to Artifact Registry
   - name: gcr.io/cloud-builders/docker
+    id: push
     args: ["push", "$_IMAGE"]
 
-  # Idempotent: remove literal USE_MEET if it exists (prevents type-flip failures)
+  # 3) Idempotent pre-clean: remove a literal USE_MEET if present (no-op if not)
   - name: gcr.io/cloud-builders/gcloud
     id: pre-clean-env
     entrypoint: bash
@@ -26,7 +31,7 @@ steps:
         --region="$_REGION" --project="$PROJECT_ID"
         --remove-env-vars=USE_MEET || true
 
-  # Deploy with secret-backed USE_MEET
+  # 4) Deploy with USE_MEET as a secret-backed env (type is now stable forever)
   - name: gcr.io/cloud-builders/gcloud
     id: deploy
     args:
@@ -36,12 +41,13 @@ steps:
         "--region","$_REGION",
         "--project","$PROJECT_ID",
         "--set-secrets","USE_MEET=${_USE_MEET_SECRET}:latest",
-        "--update-env-vars","SEND_UPDATES=all,GOOGLE_DELEGATED_USER=thomaspal@innerpeace-developer.co.uk,MANAGER_CALENDAR_ID=thomaspal@innerpeace-developer.co.uk"
+        "--update-env-vars",
+        "SEND_UPDATES=all,GOOGLE_DELEGATED_USER=thomaspal@innerpeace-developer.co.uk,MANAGER_CALENDAR_ID=thomaspal@innerpeace-developer.co.uk"
       ]
 
 images:
   - $_IMAGE
 
-# <- This is the key line that satisfies Cloud Build when using a custom SA
+# When a trigger runs with a custom service account, you must pick a logging mode.
 options:
   logging: CLOUD_LOGGING_ONLY
