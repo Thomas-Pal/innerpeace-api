@@ -1,15 +1,21 @@
-# cloudbuild.yaml — DEPLOY SECTION
+# cloudbuild.yaml
 substitutions:
-  _SERVICE: innerpeace-api
   _REGION: europe-west2
-  # build to AR and deploy this tag (keep your existing build steps)
-  _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/apps/innerpeace-api:$SHORT_SHA
+  _REPO: apps
+  _SERVICE: innerpeace-api
+  _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE:$SHORT_SHA
   _USE_MEET_SECRET: use-meet-prod
 
 steps:
-  # ... your build & push steps ...
+  # Build container
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "$_IMAGE", "."]
 
-  # Remove literal USE_MEET if present (no-op if not)
+  # Push to Artifact Registry
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "$_IMAGE"]
+
+  # Idempotent: remove literal USE_MEET if it exists (prevents type-flip failures)
   - name: gcr.io/cloud-builders/gcloud
     id: pre-clean-env
     entrypoint: bash
@@ -20,7 +26,7 @@ steps:
         --region="$_REGION" --project="$PROJECT_ID"
         --remove-env-vars=USE_MEET || true
 
-  # Deploy with USE_MEET as a secret-backed var (type now stable forever)
+  # Deploy with secret-backed USE_MEET
   - name: gcr.io/cloud-builders/gcloud
     id: deploy
     args:
@@ -35,3 +41,7 @@ steps:
 
 images:
   - $_IMAGE
+
+# <- This is the key line that satisfies Cloud Build when using a custom SA
+options:
+  logging: CLOUD_LOGGING_ONLY
