@@ -1,53 +1,54 @@
+// server/auth/calendarClient.ts
 import { google, calendar_v3 } from 'googleapis';
 
-export type AuthMode = 'keyless-dwd' | 'adc';
+/**
+ * Domain-Wide Delegation (DWD) Calendar client.
+ * Impersonates GOOGLE_DELEGATED_USER (the manager) using a service account key.
+ *
+ * Required env:
+ * - GOOGLE_DELEGATED_USER            // e.g. thomaspal@innerpeace-developer.co.uk
+ * - Either:
+ *     GOOGLE_DWD_SA_KEY_JSON         // full JSON key as a string (recommended via Secret Manager)
+ *   OR GOOGLE_DWD_SA_KEY_PATH        // filesystem path to the JSON key (mounted secret)
+ */
+const SCOPE = 'https://www.googleapis.com/auth/calendar';
 
-export default async function getCalendarClient(mode: AuthMode = 'keyless-dwd'): Promise<calendar_v3.Calendar> {
-  const scopes = ['https://www.googleapis.com/auth/calendar'];
-  const delegatedUser = process.env.GOOGLE_DELEGATED_USER || '';
-  const dwdSaEmail = process.env.DWD_SA_EMAIL || '';
+let cached: calendar_v3.Calendar | null = null;
 
-  if (mode === 'keyless-dwd') {
-    if (!delegatedUser || !dwdSaEmail) throw new Error('DWD envs missing');
-    const iam = google.iamcredentials('v1');
-    const name = `projects/-/serviceAccounts/${dwdSaEmail}`;
-    const now = Math.floor(Date.now() / 1000);
-    const payload = {
-      iss: dwdSaEmail,
-      sub: delegatedUser,
-      aud: 'https://oauth2.googleapis.com/token',
-      scope: scopes.join(' '),
-      iat: now,
-      exp: now + 3600
-    };
-
-    const { data } = await iam.projects.serviceAccounts.signJwt({
-      name, requestBody: { payload: JSON.stringify(payload) }
-    });
-
-    const assertion = data.signedJwt;
-    if (!assertion) throw new Error('signJwt failed');
-
-    const resp = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion
-      })
-    });
-    if (!resp.ok) throw new Error(`token_exchange_failed: ${resp.status} ${await resp.text()}`);
-
-    const tok = await resp.json() as { access_token: string };
-    const auth = new google.auth.OAuth2();
-    auth.setCredentials({ access_token: tok.access_token });
-
-    google.options({ auth }); // force Authorization on all googleapis calls
-    return google.calendar({ version: 'v3', auth });
+function readSaKey(): { client_email: string; private_key: string } {
+  const json = process.env.GOOGLE_DWD_SA_KEY_JSON;
+  if (json) {
+    try {
+      const parsed = JSON.parse(json);
+      return { client_email: parsed.client_email, private_key: parsed.private_key };
+    } catch {
+      throw new Error('GOOGLE_DWD_SA_KEY_JSON is not valid JSON');
+    }
   }
+  const path = process.env.GOOGLE_DWD_SA_KEY_PATH;
+  if (!path) throw new Error('Missing GOOGLE_DWD_SA_KEY_JSON or GOOGLE_DWD_SA_KEY_PATH');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = require('fs') as typeof import('fs');
+  const raw = fs.readFileSync(path, 'utf8');
+  const parsed = JSON.parse(raw);
+  return { client_email: parsed.client_email, private_key: parsed.private_key };
+}
 
-  // ADC fallback: share calendar with runtime SA if you ever use this path
-  const auth = new google.auth.GoogleAuth({ scopes });
-  google.options({ auth });
-  return google.calendar({ version: 'v3', auth });
+export default async function getCalendarClient(): Promise<calendar_v3.Calendar> {
+  if (cached) return cached;
+
+  const delegatedUser = process.env.GOOGLE_DELEGATED_USER;
+  if (!delegatedUser) throw new Error('Missing GOOGLE_DELEGATED_USER');
+
+  const { client_email, private_key } = readSaKey();
+
+  const jwt = new google.auth.JWT({
+    email: client_email,
+    key: private_key,
+    scopes: [SCOPE],
+    subject: delegatedUser, // <- impersonate manager
+  });
+
+  cached = google.calendar({ version: 'v3', auth: jwt });
+  return cached;
 }
