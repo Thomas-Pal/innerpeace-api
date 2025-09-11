@@ -5,7 +5,7 @@ options:
 timeout: "1200s"
 
 steps:
-  # 1) Build & push image to Artifact Registry
+  # 1) Build & push the image to Artifact Registry
   - id: build-and-push
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
@@ -13,20 +13,20 @@ steps:
       - -ceu
       - |
         set -o pipefail
-        # Cloud Build built-ins (single $) are safe to use directly:
+        # Built-ins (single $) are safe: expanded by Cloud Build
         TAG="${SHORT_SHA:-${BUILD_ID:-local-$(date +%s)}}"
-        PROJECT="${PROJECT_ID}"
         REGION="europe-west2"
-        REPO="innerpeace"            # AR repo name (must exist)
+        REPO="innerpeace"            # AR repo name
         SERVICE="innerpeace-api"     # Cloud Run service
-        IMG="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${SERVICE}:${TAG}"
+        PROJECT="${PROJECT_ID}"      # capture built-in for later
+        IMG="$${REGION}-docker.pkg.dev/$PROJECT_ID/$${REPO}/$${SERVICE}:$${TAG}"
 
-        echo "Building ${IMG}"
-        docker build -t "${IMG}" .
-        docker push "${IMG}"
-        printf '%s' "${IMG}" > /workspace/IMG.txt
+        echo "Building $${IMG}"
+        docker build -t "$${IMG}" .
+        docker push "$${IMG}"
+        printf '%s' "$${IMG}" > /workspace/IMG.txt
 
-  # 2) If USE_MEET was ever secret-backed, remove that mapping first (no-op if absent)
+  # 2) If USE_MEET was ever secret-backed, remove that mapping first (safe no-op)
   - id: pre-clean-secret-mapping
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
@@ -37,7 +37,7 @@ steps:
           --region=europe-west2 --project="${PROJECT_ID}" \
           --remove-secrets=USE_MEET || true
 
-  # 3) Deploy with USE_MEET as a literal (stable lane; no type flip)
+  # 3) Deploy with USE_MEET as a literal (no type flip)
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
@@ -47,7 +47,7 @@ steps:
         IMG="$(cat /workspace/IMG.txt)"
         gcloud run deploy innerpeace-api \
           --region=europe-west2 --project="${PROJECT_ID}" \
-          --image "${IMG}" \
+          --image "$${IMG}" \
           --service-account "run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
           --port 8080 --min-instances 1 --max-instances 20 --concurrency 80 --timeout 240 \
           --update-env-vars USE_MEET=auto,SEND_UPDATES=all,GOOGLE_DELEGATED_USER=thomaspal@innerpeace-developer.co.uk,MANAGER_CALENDAR_ID=thomaspal@innerpeace-developer.co.uk \
