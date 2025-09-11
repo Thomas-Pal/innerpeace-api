@@ -1,53 +1,39 @@
-# cloudbuild.yaml
-# Build+deploy InnerPeace API to Cloud Run via GitHub trigger.
-
-substitutions:
-  _REGION: europe-west2
-  _REPO: innerpeace                 # <-- Artifact Registry repo name
-  _SERVICE: innerpeace-api          # <-- Cloud Run service name
-  _USE_MEET_SECRET: use-meet-prod   # <-- Secret Manager secret that holds "auto|always|never"
-  # Image URL we'll build and deploy (uses built-ins $PROJECT_ID and $SHORT_SHA)
-  _IMAGE: europe-west2-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
-
-steps:
-  # 1) Build container image from the Dockerfile at repo root (adjust "." if needed)
-  - name: gcr.io/cloud-builders/docker
-    id: build
-    args: ["build", "-t", "$_IMAGE", "."]
-
-  # 2) Push to Artifact Registry
-  - name: gcr.io/cloud-builders/docker
-    id: push
-    args: ["push", "$_IMAGE"]
-
-  # 3) Idempotent pre-clean: remove a literal USE_MEET if present (no-op if not)
-  - name: gcr.io/cloud-builders/gcloud
-    id: pre-clean-env
-    entrypoint: bash
-    args:
-      - -c
-      - >
-        gcloud run services update "$_SERVICE"
-        --region="$_REGION" --project="$PROJECT_ID"
-        --remove-env-vars=USE_MEET || true
-
-  # 4) Deploy with USE_MEET as a secret-backed env (type is now stable forever)
-  - name: gcr.io/cloud-builders/gcloud
-    id: deploy
-    args:
-      [
-        "run","deploy","$_SERVICE",
-        "--image","$_IMAGE",
-        "--region","$_REGION",
-        "--project","$PROJECT_ID",
-        "--set-secrets","USE_MEET=${_USE_MEET_SECRET}:latest",
-        "--update-env-vars",
-        "SEND_UPDATES=all,GOOGLE_DELEGATED_USER=thomaspal@innerpeace-developer.co.uk,MANAGER_CALENDAR_ID=thomaspal@innerpeace-developer.co.uk"
-      ]
-
-images:
-  - $_IMAGE
-
-# When a trigger runs with a custom service account, you must pick a logging mode.
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: "1200s"
+
+steps:
+  - id: build-and-push
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        set -o pipefail
+        TAG="${BUILD_ID:-local-$(date +%s)}"
+        IMG="europe-west2-docker.pkg.dev/${PROJECT_ID}/innerpeace/innerpeace-api:$${TAG}"
+        echo "Building $${IMG}"
+        docker build -t "$${IMG}" .
+        docker push "$${IMG}"
+        printf '%s' "$${IMG}" > /workspace/IMG.txt
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        set -o pipefail
+        IMG="$(cat /workspace/IMG.txt)"
+        gcloud run deploy innerpeace-api \
+          --region europe-west2 \
+          --image "$${IMG}" \
+          --service-account "run-innerpeace-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+          --port 8080 \
+          --min-instances 1 \
+          --max-instances 20 \
+          --concurrency 80 \
+          --timeout 240 \
+          --update-secrets CALENDAR_ID=CALENDAR_ID:latest,USE_MEET=USE_MEET:latest \
+          --no-allow-unauthenticated
