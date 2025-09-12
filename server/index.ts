@@ -26,7 +26,7 @@ const {
   PORT = '8080',
   CALENDAR_ID = 'primary',
   MANAGER_CALENDAR_ID = '',
-  MANAGER_EMAIL = 'thomaspal.innerpeace-developer.co.uk',
+  MANAGER_EMAIL = 'thomaspal@innerpeace-developer.co.uk',
   USE_MEET = 'auto',
   SEND_UPDATES = 'all',
   BOOK_ORGANIZER_MODE = 'manager', // keep for future; defaults to manager
