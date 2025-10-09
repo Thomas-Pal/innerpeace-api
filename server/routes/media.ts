@@ -38,6 +38,8 @@ export async function listMedia(req: Request, res: Response) {
         fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime)',
         pageSize: 1000,
         pageToken,
+        supportsAllDrives: true,                  // ✅ important
+        includeItemsFromAllDrives: true,          // ✅ important
       });
       for (const f of data.files ?? []) {
         if (!f.id || !f.mimeType) continue;
@@ -67,18 +69,23 @@ export async function streamMedia(req: Request, res: Response) {
 
     const drive = await driveClientFromADC();
 
-    const meta = await drive.files.get({
+    // Trace
+    const range = req.headers.range as string | undefined;
+    console.log('[media:stream] fileId=%s range=%s', fileId, range ?? 'none');
+
+    // Metadata (so we can compute Content-Range)
+    const { data: meta } = await drive.files.get({
       fileId,
       fields: 'id, name, mimeType, size',
+      supportsAllDrives: true,                  // ✅
     });
-    const mime = meta.data.mimeType || 'application/octet-stream';
-    const size = meta.data.size ? Number(meta.data.size) : undefined;
+    const mime = meta.mimeType || 'application/octet-stream';
+    const size = meta.size ? Number(meta.size) : undefined;
 
-    const range = req.headers.range;
     if (range && size !== undefined) {
-      const match = /bytes=(\d+)-(\d+)?/.exec(range);
-      const start = match ? Number(match[1]) : 0;
-      const end = match && match[2] ? Number(match[2]) : size - 1;
+      const m = /bytes=(\d+)-(\d+)?/.exec(range);
+      const start = m ? Number(m[1]) : 0;
+      const end = m && m[2] ? Number(m[2]) : size - 1;
       if (start >= size || end >= size || end < start) {
         res.status(416).set('Content-Range', `bytes */${size}`).end();
         return;
@@ -86,16 +93,16 @@ export async function streamMedia(req: Request, res: Response) {
       const chunkSize = end - start + 1;
 
       const resp = await drive.files.get(
-        { fileId, alt: 'media' },
+        { fileId, alt: 'media', supportsAllDrives: true },       // ✅
         { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } },
       );
 
-      res.status(206);
-      res.set({
+      res.status(206).set({
         'Content-Type': mime,
         'Content-Length': String(chunkSize),
         'Accept-Ranges': 'bytes',
         'Content-Range': `bytes ${start}-${end}/${size}`,
+        'Content-Disposition': `inline; filename="${(meta.name || 'file')}"`, // ✅
         'Cache-Control': process.env.MEDIA_CACHE_MAX_AGE || 'public, max-age=3600',
       });
 
@@ -107,16 +114,17 @@ export async function streamMedia(req: Request, res: Response) {
       return;
     }
 
+    // Full-body (no Range)
     const resp = await drive.files.get(
-      { fileId, alt: 'media' },
+      { fileId, alt: 'media', supportsAllDrives: true },         // ✅
       { responseType: 'stream' },
     );
 
-    res.status(200);
-    res.set({
+    res.status(200).set({
       'Content-Type': mime,
       ...(size ? { 'Content-Length': String(size) } : {}),
       'Accept-Ranges': 'bytes',
+      'Content-Disposition': `inline; filename="${(meta.name || 'file')}"`,   // ✅
       'Cache-Control': process.env.MEDIA_CACHE_MAX_AGE || 'public, max-age=3600',
     });
 
