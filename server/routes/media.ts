@@ -1,181 +1,132 @@
-// server/routes/media.ts
-import express, { type Request, type Response } from 'express';
-import { GoogleAuth } from 'google-auth-library';
-import fetch from 'node-fetch';
+import type { Request, Response } from 'express';
+import { driveClientFromADC } from '../utils/googleClient.js';
 
-const router = express.Router();
+const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
 
-// Drive constants
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
-const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
+type MediaItem = {
+  id: string;
+  name: string | null;
+  mimeType: string;
+  size?: number;
+  modifiedTime?: string | null;
+};
 
-const auth = new GoogleAuth({ scopes: [DRIVE_SCOPE] });
-
-/**
- * Fetch a readable stream from Google Drive for a fileId.
- * We forward the Range header verbatim so Drive handles 206/Content-Range for us.
- */
-async function driveFetchStream(fileId: string, rangeHeader?: string) {
-  const client = await auth.getClient();
-  const accessToken = await client.getAccessToken();
-  const url = `${DRIVE_API}/${encodeURIComponent(fileId)}?alt=media`;
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${typeof accessToken === 'string' ? accessToken : accessToken?.token ?? ''}`,
-      ...(rangeHeader ? { Range: rangeHeader } : {}),
-    },
-  });
-
-  return res;
+function isAllowed(mimeType: string, allowed: string[]): boolean {
+  if (!mimeType) return false;
+  return allowed.some((a) =>
+    a.endsWith('/*') ? mimeType.startsWith(a.slice(0, -1)) : mimeType === a,
+  );
 }
 
-/**
- * Fetch file metadata (size, mimeType, name, modifiedTime).
- * Useful for HEAD responses and debugging.
- */
-async function driveGetMeta(fileId: string) {
-  const client = await auth.getClient();
-  const accessToken = await client.getAccessToken();
-  const url = `${DRIVE_API}/${encodeURIComponent(fileId)}?fields=size,mimeType,name,modifiedTime,md5Checksum`;
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${typeof accessToken === 'string' ? accessToken : accessToken?.token ?? ''}`,
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    const error = new Error(`Drive metadata fetch failed (${res.status}): ${text}`);
-    (error as any).status = res.status;
-    throw error;
-  }
-  return (await res.json()) as {
-    size?: string;
-    mimeType?: string;
-    name?: string;
-    modifiedTime?: string;
-    md5Checksum?: string;
-  };
-}
-
-/**
- * Copy a safe subset of upstream headers to the client.
- */
-function passthroughHeaders(upstream: Headers, res: Response) {
-  const hopByHop = new Set([
-    'connection',
-    'keep-alive',
-    'proxy-authenticate',
-    'proxy-authorization',
-    'te',
-    'trailers',
-    'transfer-encoding',
-    'upgrade',
-  ]);
-
-  upstream.forEach((value, key) => {
-    const k = key.toLowerCase();
-    if (!hopByHop.has(k)) {
-      try {
-        // Avoid setting multiple cache-control variants; we’ll set our own if missing
-        if (k === 'cache-control') return;
-        res.setHeader(key, value);
-      } catch {
-        // Some headers (like duplicate set-cookie) can be finicky; ignore safely
-      }
-    }
-  });
-
-  // Ensure sensible caching if upstream didn’t provide it
-  if (!res.getHeader('Cache-Control')) {
-    // 1 hour CDN/browser caching; tweak as needed
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-  }
-  // Help proxies to not buffer long streams
-  res.setHeader('X-Accel-Buffering', 'no');
-}
-
-/**
- * GET /media/drive/:fileId
- * Streams a Google Drive file (audio/video) with Range support.
- */
-router.get('/media/drive/:fileId', async (req: Request, res: Response) => {
-  const { fileId } = req.params;
-
-  if (!fileId) {
-    res.status(400).json({ error: 'bad_request', message: 'fileId is required' });
-    return;
-  }
-
+export async function listMedia(req: Request, res: Response) {
   try {
-    const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
-    const upstream = await driveFetchStream(fileId, range);
+    const drive = await driveClientFromADC();
+    const folderId = (req.query.folderId as string) || process.env.DRIVE_FOLDER_ID;
+    if (!folderId) return res.status(400).json({ error: 'folderId_required' });
 
-    // Allow 200 OK (full) and 206 Partial Content
-    if (!(upstream.ok || upstream.status === 206)) {
-      const text = await upstream.text().catch(() => '');
-      res.status(upstream.status).send(text || 'Upstream error');
+    const allowedCsv = process.env.MEDIA_ALLOWED_MIME || '';
+    const allowed = allowedCsv
+      ? allowedCsv.split(',').map((s) => s.trim()).filter(Boolean)
+      : DEFAULT_ALLOWED;
+
+    const files: MediaItem[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const { data } = await drive.files.list({
+        q: `'${folderId}' in parents and trashed = false`,
+        fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime)',
+        pageSize: 1000,
+        pageToken,
+      });
+      for (const f of data.files ?? []) {
+        if (!f.id || !f.mimeType) continue;
+        if (!isAllowed(f.mimeType, allowed)) continue;
+        files.push({
+          id: f.id,
+          name: f.name ?? null,
+          mimeType: f.mimeType,
+          size: f.size ? Number(f.size) : undefined,
+          modifiedTime: f.modifiedTime ?? null,
+        });
+      }
+      pageToken = data.nextPageToken || undefined;
+    } while (pageToken);
+
+    return res.json({ items: files });
+  } catch (err) {
+    console.error('[media:list] failed', err);
+    return res.status(500).json({ error: 'media_list_failed' });
+  }
+}
+
+export async function streamMedia(req: Request, res: Response) {
+  try {
+    const fileId = req.params.id;
+    if (!fileId) return res.status(400).json({ error: 'file_id_required' });
+
+    const drive = await driveClientFromADC();
+
+    const meta = await drive.files.get({
+      fileId,
+      fields: 'id, name, mimeType, size',
+    });
+    const mime = meta.data.mimeType || 'application/octet-stream';
+    const size = meta.data.size ? Number(meta.data.size) : undefined;
+
+    const range = req.headers.range;
+    if (range && size !== undefined) {
+      const match = /bytes=(\d+)-(\d+)?/.exec(range);
+      const start = match ? Number(match[1]) : 0;
+      const end = match && match[2] ? Number(match[2]) : size - 1;
+      if (start >= size || end >= size || end < start) {
+        res.status(416).set('Content-Range', `bytes */${size}`).end();
+        return;
+      }
+      const chunkSize = end - start + 1;
+
+      const resp = await drive.files.get(
+        { fileId, alt: 'media' },
+        { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } },
+      );
+
+      res.status(206);
+      res.set({
+        'Content-Type': mime,
+        'Content-Length': String(chunkSize),
+        'Accept-Ranges': 'bytes',
+        'Content-Range': `bytes ${start}-${end}/${size}`,
+        'Cache-Control': process.env.MEDIA_CACHE_MAX_AGE || 'public, max-age=3600',
+      });
+
+      resp.data.on('error', (e: any) => {
+        console.error('[media:stream] stream error', e);
+        if (!res.headersSent) res.status(500).end();
+      });
+      resp.data.pipe(res);
       return;
     }
 
-    passthroughHeaders(upstream.headers as unknown as Headers, res);
-    res.status(upstream.status);
+    const resp = await drive.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'stream' },
+    );
 
-    // Pipe body stream
-    if (upstream.body) {
-      upstream.body.pipe(res);
-      // If the client disconnects, abort the upstream
-      req.on('close', () => {
-        try {
-          // @ts-expect-error node-fetch body has destroy()
-          upstream.body.destroy?.();
-        } catch {
-          /* no-op */
-        }
-      });
-    } else {
-      res.end();
-    }
-  } catch (err: any) {
-    console.error('[media] drive proxy failed', err);
-    const status = err?.status ?? 500;
-    res.status(status).json({
-      error: 'drive_proxy_failed',
-      message:
-        err?.message ??
-        'Failed to stream from Google Drive. Ensure the Cloud Run service account has access to this file.',
+    res.status(200);
+    res.set({
+      'Content-Type': mime,
+      ...(size ? { 'Content-Length': String(size) } : {}),
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': process.env.MEDIA_CACHE_MAX_AGE || 'public, max-age=3600',
     });
+
+    resp.data.on('error', (e: any) => {
+      console.error('[media:stream] stream error', e);
+      if (!res.headersSent) res.status(500).end();
+    });
+    resp.data.pipe(res);
+  } catch (err) {
+    console.error('[media:stream] failed', err);
+    return res.status(500).json({ error: 'media_stream_failed' });
   }
-});
-
-/**
- * HEAD /media/drive/:fileId
- * Returns length & type without streaming body (some players probe first).
- */
-router.head('/media/drive/:fileId', async (req: Request, res: Response) => {
-  const { fileId } = req.params;
-
-  if (!fileId) {
-    res.status(400).end();
-    return;
-  }
-
-  try {
-    const meta = await driveGetMeta(fileId);
-
-    if (meta.mimeType) res.setHeader('Content-Type', meta.mimeType);
-    if (meta.size) res.setHeader('Content-Length', meta.size);
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.status(200).end();
-  } catch (err: any) {
-    console.error('[media] drive HEAD failed', err);
-    res.status(err?.status ?? 500).end();
-  }
-});
-
-export default router;
+}

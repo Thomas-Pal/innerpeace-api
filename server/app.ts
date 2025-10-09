@@ -1,22 +1,23 @@
 import cors from 'cors';
 import express from 'express';
-import availabilityRouter from './routes/availability.js';
-import bookingRouter from './routes/booking.js';
-import bookingsRouter from './routes/bookings.js';
-import driveRouter from './routes/drive.js';
-import healthRouter from './routes/health.js';
-import media from './routes/media.js';
+import { availabilityHandler } from './routes/availability.js';
+import { createBooking, cancelBooking, updateBooking } from './routes/booking.js';
+import { listBookings } from './routes/bookings.js';
+import { listMedia, streamMedia } from './routes/media.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-app.use('/health', healthRouter);
-app.use('/api/drive', driveRouter);
-app.use('/api/availability', availabilityRouter);
-app.use('/api/bookings', bookingsRouter);
-app.use('/api/book', bookingRouter);
-app.use('/api/media', media);
+app.get('/health', (_req, res) => res.status(200).send('ok'));
+
+app.get('/api/availability', availabilityHandler);
+app.get('/api/bookings', listBookings);
+app.post('/api/book', createBooking);
+app.delete('/api/book/:id', cancelBooking);
+app.put('/api/book/:id', updateBooking);
+app.get('/api/media/list', listMedia);
+app.get('/api/media/stream/:id', streamMedia);
 
 export default app;
