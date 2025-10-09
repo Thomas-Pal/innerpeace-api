@@ -8,7 +8,7 @@ securityDefinitions:
   google_jwt:
     type: oauth2
     flow: implicit
-    authorizationUrl: ""
+    authorizationUrl: ""    # not used in validation mode
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
     x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
@@ -16,114 +16,87 @@ securityDefinitions:
 paths:
   /health:
     get:
+      operationId: healthCheck
       security: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        "200":
-          description: "OK"
+        "200": { description: "OK" }
 
   /api/availability:
     get:
+      operationId: getAvailability
       parameters:
-        - name: start
-          in: query
-          type: string
-          required: false
-        - name: end
-          in: query
-          type: string
-          required: false
-      security:
-        - google_jwt: []
+        - { name: start, in: query, type: string, required: false }
+        - { name: end,   in: query, type: string, required: false }
+      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        "200":
-          description: "OK"
+        "200": { description: "OK" }
 
   /api/book:
     post:
-      security:
-        - google_jwt: []
+      operationId: createBooking
+      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        "200":
-          description: "OK"
+        "200": { description: "OK" }
 
   /api/bookings:
     get:
+      operationId: listBookings
       parameters:
-        - name: uid
-          in: query
-          type: string
-          required: false
-      security:
-        - google_jwt: []
+        - { name: uid, in: query, type: string, required: false }
+      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        "200":
-          description: "OK"
+        "200": { description: "OK" }
 
   /api/book/{id}:
     delete:
+      operationId: deleteBooking
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
-      security:
-        - google_jwt: []
+        - { name: id, in: path, required: true, type: string }
+      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        "200":
-          description: "OK"
+        "200": { description: "OK" }
 
   /api/media/list:
     get:
+      operationId: listMedia
       parameters:
-        - name: folderId
-          in: query
-          type: string
-          required: false
-      security:
-        - google_jwt: []
+        - { name: folderId, in: query, type: string, required: false }
+      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        "200":
-          description: "OK"
+        "200": { description: "OK" }
 
   /api/media/stream/{id}:
     get:
+      operationId: streamMedia
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
-      security:
-        - google_jwt: []
+        - { name: id, in: path, required: true, type: string }
+      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
-        path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        "200":
-          description: "OK"
-        "206":
-          description: "Partial content"
+        "200": { description: "OK" }
+        "206": { description: "Partial content" }
