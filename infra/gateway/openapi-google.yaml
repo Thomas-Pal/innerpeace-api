@@ -70,3 +70,26 @@ paths:
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses: { "200": { description: "OK" } }
+      
+  /api/media/list:
+    get:
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        '200': { description: OK }
+
+  /api/media/stream/{id}:
+    get:
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      security: [ { google_jwt: [] } ]
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        '200': { description: OK }
+        '206': { description: Partial content }
+
