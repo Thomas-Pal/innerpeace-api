@@ -5,6 +5,7 @@ import bookingRouter from './routes/booking.js';
 import bookingsRouter from './routes/bookings.js';
 import driveRouter from './routes/drive.js';
 import healthRouter from './routes/health.js';
+import media from './routes/media';
 
 const app = express();
 
@@ -16,5 +17,6 @@ app.use('/api/drive', driveRouter);
 app.use('/api/availability', availabilityRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/book', bookingRouter);
+app.use('/api/media', media);
 
 export default app;
