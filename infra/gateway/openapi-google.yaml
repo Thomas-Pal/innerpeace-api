@@ -1,18 +1,19 @@
 swagger: "2.0"
 info:
   title: innerpeace-api
-  version: "1.0.0"
-schemes: ["https"]
+  version: "1.0.1"
+schemes:
+  - https
 
 # Accept Google Sign-In ID tokens from your app(s)
 securityDefinitions:
   google_jwt:
     type: oauth2
     flow: implicit
-    authorizationUrl: ""    # unused for validation mode
+    authorizationUrl: ""
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
-    # Must match your app client IDs (keep both if you truly use two)
+    # Keep both client IDs if you truly use two (comma-separated string is valid)
     x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
 
 paths:
@@ -25,71 +26,114 @@ paths:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses: { "200": { description: "OK" } }
+      responses:
+        "200":
+          description: OK
 
   /api/availability:
     get:
       operationId: getAvailability
       parameters:
-        - { name: start, in: query, type: string, required: false }
-        - { name: end,   in: query, type: string, required: false }
-      security: [ { google_jwt: [] } ]
+        - name: start
+          in: query
+          required: false
+          type: string
+        - name: end
+          in: query
+          required: false
+          type: string
+      security:
+        - google_jwt: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses: { "200": { description: "OK" } }
+      responses:
+        "200":
+          description: OK
 
   /api/book:
     post:
       operationId: postBook
-      security: [ { google_jwt: [] } ]
+      security:
+        - google_jwt: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses: { "200": { description: "OK" } }
+      responses:
+        "200":
+          description: OK
 
   /api/bookings:
     get:
       operationId: getBookings
-      security: [ { google_jwt: [] } ]
+      security:
+        - google_jwt: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses: { "200": { description: "OK" } }
+      responses:
+        "200":
+          description: OK
 
   /api/book/{id}:
     delete:
       operationId: deleteBooking
-      parameters: [ { name: id, in: path, required: true, type: string } ]
-      security: [ { google_jwt: [] } ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string           # <-- FIX: Swagger 2.0 requires `type`, not `schema`
+      security:
+        - google_jwt: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
         jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses: { "200": { description: "OK" } }
-      
+      responses:
+        "200":
+          description: OK
+
   /api/media/list:
     get:
-      security: [ { google_jwt: [] } ]
+      operationId: listMedia
+      parameters:
+        - name: folderId
+          in: query
+          required: true
+          type: string
+      security:
+        - google_jwt: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
 
   /api/media/stream/{id}:
     get:
+      operationId: streamMedia
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
-          schema: { type: string }
-      security: [ { google_jwt: [] } ]
+          type: string           # <-- FIX: no `schema` in Swagger 2.0
+        - name: Range           # Optional: allow partial content
+          in: header
+          required: false
+          type: string
+      security:
+        - google_jwt: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
-        '200': { description: OK }
-        '206': { description: Partial content }
-
+        "200":
+          description: OK
+        "206":
+          description: Partial content
