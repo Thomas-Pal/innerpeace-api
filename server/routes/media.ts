@@ -127,7 +127,6 @@ router.get('/media/drive/:fileId', async (req: Request, res: Response) => {
 
     // Pipe body stream
     if (upstream.body) {
-      // @ts-expect-error -- node-fetch body is a readable stream compatible with Express
       upstream.body.pipe(res);
       // If the client disconnects, abort the upstream
       req.on('close', () => {
