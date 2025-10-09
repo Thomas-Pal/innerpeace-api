@@ -1,11 +1,9 @@
-import { Router } from 'express';
+import type { Request, Response } from 'express';
 import type { calendar_v3 } from 'googleapis';
-import getCalendarClient from '../auth/calendarClient.js';
+import { calendarClientFromRequest } from '../utils/googleClient.js';
 import { requireAuth } from '../middleware/auth.js';
 import config, { targetCalendarId } from '../config/environment.js';
 import { pickMeetUrl } from '../utils/events.js';
-
-const router = Router();
 
 function shouldCreateMeet(mode?: string | null): boolean {
   if (config.useMeet === 'always') return true;
@@ -13,10 +11,24 @@ function shouldCreateMeet(mode?: string | null): boolean {
   return String(mode || '').toLowerCase() === 'virtual';
 }
 
-router.post('/', async (req, res) => {
+async function getCalendarOr401(req: Request, res: Response) {
   try {
     requireAuth(req);
-    const cal = await getCalendarClient();
+    return await calendarClientFromRequest(req);
+  } catch (error: unknown) {
+    const status = (error as any)?.status || (error as any)?.response?.status;
+    if (status === 401) {
+      res.status(401).json({ code: 401, message: 'Missing user token' });
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function createBooking(req: Request, res: Response) {
+  try {
+    const calendar = await getCalendarOr401(req, res);
+    if (!calendar) return;
 
     const { start, end, email, name, mode, location } = (req.body || {}) as {
       start?: string;
@@ -40,7 +52,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const created = await cal.events.insert({
+    const created = await calendar.events.insert({
       calendarId: targetCalendarId,
       conferenceDataVersion: wantMeet ? 1 : 0,
       sendUpdates: config.sendUpdates,
@@ -52,7 +64,11 @@ router.post('/', async (req, res) => {
         attendees: attendees.length ? attendees : undefined,
         location: !wantMeet ? (location || undefined) : undefined,
         conferenceData: wantMeet
-          ? { createRequest: { requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2)}` } }
+          ? {
+              createRequest: {
+                requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              },
+            }
           : undefined,
         guestsCanModify: false,
         guestsCanInviteOthers: false,
@@ -64,39 +80,45 @@ router.post('/', async (req, res) => {
     const meetingUrl = pickMeetUrl(created.data as calendar_v3.Schema$Event) || null;
 
     return res.json({ ok: true, id: created.data.id, meetingUrl });
-  } catch (e: unknown) {
-    console.error('booking_failed', (e as any)?.response?.data || (e as Error)?.message || e);
-    const status = (e as any)?.status || (e as any)?.response?.status || 500;
+  } catch (error: unknown) {
+    console.error(
+      '[booking] booking_failed',
+      (error as any)?.response?.data || (error as Error)?.message || error,
+    );
+    const status = (error as any)?.status || (error as any)?.response?.status || 500;
     return res.status(status).json({ error: 'booking_failed' });
   }
-});
+}
 
-router.delete('/:id', async (req, res) => {
+export async function cancelBooking(req: Request, res: Response) {
   try {
-    requireAuth(req);
-    const cal = await getCalendarClient();
+    const calendar = await getCalendarOr401(req, res);
+    if (!calendar) return;
 
     const id = String(req.params.id || '');
     if (!id) return res.status(400).json({ error: 'missing_id' });
 
-    await cal.events.delete({
+    await calendar.events.delete({
       calendarId: targetCalendarId,
       eventId: id,
       sendUpdates: config.sendUpdates,
     });
 
     return res.json({ ok: true });
-  } catch (e: unknown) {
-    console.error('cancel_failed', (e as any)?.response?.data || (e as Error)?.message || e);
-    const status = (e as any)?.status || (e as any)?.response?.status || 500;
+  } catch (error: unknown) {
+    console.error(
+      '[booking] cancel_failed',
+      (error as any)?.response?.data || (error as Error)?.message || error,
+    );
+    const status = (error as any)?.status || (error as any)?.response?.status || 500;
     return res.status(status).json({ ok: false, error: 'cancel_failed' });
   }
-});
+}
 
-router.put('/:id', async (req, res) => {
+export async function updateBooking(req: Request, res: Response) {
   try {
-    requireAuth(req);
-    const cal = await getCalendarClient();
+    const calendar = await getCalendarOr401(req, res);
+    if (!calendar) return;
 
     const id = String(req.params.id || '');
     if (!id) return res.status(400).json({ error: 'missing_id' });
@@ -108,7 +130,7 @@ router.put('/:id', async (req, res) => {
     };
     if (!start || !end) return res.status(400).json({ error: 'missing_dates' });
 
-    const updated = await cal.events.patch({
+    const updated = await calendar.events.patch({
       calendarId: targetCalendarId,
       eventId: id,
       conferenceDataVersion: 1,
@@ -130,11 +152,12 @@ router.put('/:id', async (req, res) => {
       location: updated.data.location || null,
       meetingUrl,
     });
-  } catch (e: unknown) {
-    console.error('amend_failed', (e as any)?.response?.data || (e as Error)?.message || e);
-    const status = (e as any)?.status || (e as any)?.response?.status || 500;
+  } catch (error: unknown) {
+    console.error(
+      '[booking] amend_failed',
+      (error as any)?.response?.data || (error as Error)?.message || error,
+    );
+    const status = (error as any)?.status || (error as any)?.response?.status || 500;
     return res.status(status).json({ ok: false, error: 'amend_failed' });
   }
-});
-
-export default router;
+}
