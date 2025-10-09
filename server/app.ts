@@ -5,7 +5,7 @@ import bookingRouter from './routes/booking.js';
 import bookingsRouter from './routes/bookings.js';
 import driveRouter from './routes/drive.js';
 import healthRouter from './routes/health.js';
-import media from './routes/media';
+import media from './routes/media.js';
 
 const app = express();
 
