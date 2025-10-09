@@ -90,15 +90,15 @@ paths:
         "200": { description: "OK" }
 
   /api/media/stream/{id}:
-  get:
-    operationId: streamMedia
-    parameters:
-      - { name: id, in: path, required: true, type: string }
-    security: []  # <-- allow public access to this one route
-    x-google-backend:
-      address: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      path_translation: APPEND_PATH_TO_ADDRESS
-      jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-    responses:
-      "200": { description: "OK" }
-      "206": { description: "Partial content" }
+    get:
+      operationId: streamMedia
+      parameters:
+        - { name: id, in: path, required: true, type: string }
+      security: []   # public streaming
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        "200": { description: "OK" }
+        "206": { description: "Partial content" }
