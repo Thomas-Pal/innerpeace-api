@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "prestart": "npm run build",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch server/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js"
   },
@@ -24,6 +24,7 @@
     "@types/http-errors": "^2.0.5",
     "@types/node": "^20.19.23",
     "@types/uuid": "^9.0.7",
+    "cross-env": "^10.1.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
