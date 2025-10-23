@@ -5,11 +5,13 @@ import { createBooking, cancelBooking, updateBooking } from './routes/booking.js
 import { listBookings } from './routes/bookings.js';
 import { listMedia, streamMedia } from './routes/media.js';
 import { authMiddleware } from './middleware/auth.js';
+import { devLoggerMiddleware } from './middleware/devLogger.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(devLoggerMiddleware());
 
 app.get('/health', (_req, res) => res.status(200).send('ok'));
 
