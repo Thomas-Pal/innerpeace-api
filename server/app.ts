@@ -4,6 +4,7 @@ import { availabilityHandler } from './routes/availability.js';
 import { createBooking, cancelBooking, updateBooking } from './routes/booking.js';
 import { listBookings } from './routes/bookings.js';
 import { listMedia, streamMedia } from './routes/media.js';
+import { authMiddleware } from './middleware/auth.js';
 
 const app = express();
 
@@ -11,6 +12,9 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.status(200).send('ok'));
+
+const protectedMiddleware = authMiddleware();
+app.use(['/api/availability', '/api/bookings', '/api/book', '/api/media/list'], protectedMiddleware);
 
 app.get('/api/availability', availabilityHandler);
 app.get('/api/bookings', listBookings);

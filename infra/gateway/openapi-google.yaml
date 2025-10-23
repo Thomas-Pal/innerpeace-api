@@ -5,13 +5,31 @@ info:
 schemes: ["https"]
 
 securityDefinitions:
-  google_jwt:
+  google_id_token:
     type: oauth2
     flow: implicit
     authorizationUrl: ""
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
     x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
+
+  apple_id_token:
+    type: oauth2
+    flow: implicit
+    authorizationUrl: ""
+    x-google-issuer: "https://appleid.apple.com"
+    x-google-jwks_uri: "https://appleid.apple.com/auth/keys"
+    x-google-audiences: "com.innerpeace.app"
+    x-google-jwt-locations:
+      - in: header
+        name: x-apple-identity-token
+      - in: header
+        name: Authorization
+        value_prefix: "Bearer "
+
+security:
+  - google_id_token: []
+  - apple_id_token: []
 
 paths:
   /health:
@@ -31,7 +49,6 @@ paths:
       parameters:
         - { name: start, in: query, type: string, required: false }
         - { name: end,   in: query, type: string, required: false }
-      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -42,7 +59,6 @@ paths:
   /api/book:
     post:
       operationId: createBooking
-      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -55,7 +71,6 @@ paths:
       operationId: listBookings
       parameters:
         - { name: uid, in: query, type: string, required: false }
-      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -68,7 +83,6 @@ paths:
       operationId: deleteBooking
       parameters:
         - { name: id, in: path, required: true, type: string }
-      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -81,7 +95,6 @@ paths:
       operationId: listMedia
       parameters:
         - { name: folderId, in: query, type: string, required: false }
-      security: [ { google_jwt: [] } ]
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
