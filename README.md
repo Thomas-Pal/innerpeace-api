@@ -4,7 +4,11 @@ This service is an Express application that loads configuration from environment
 
 ## Setting environment variables
 
-1. Copy the production defaults file and fill in the values that apply to your deployment:
+1. Copy the example file and fill in the values that apply to your deployment:
+   ```bash
+   cp .env.example .env
+   ```
+   You can also start from the production defaults if you prefer:
    ```bash
    cp .env.prod .env
    ```
@@ -20,15 +24,15 @@ The Google Drive integration expects the following variables:
 
 | Variable | Description |
 | --- | --- |
-| `DRIVE_FOLDER_ID` | Default Drive folder ID to use when clients omit `?folderId=`. |
+| `DRIVE_MEDIA_FOLDER_ID` | Default Drive folder ID to use when clients omit `?folderId=`. |
 | `MEDIA_ALLOWED_MIME` | Optional. Comma-separated MIME allowlist (defaults to `video/*,audio/*`). |
 | `MEDIA_CACHE_MAX_AGE` | Optional. Value for the `Cache-Control` header when streaming media. |
 
 Any other configuration (Calendar delegation, port, etc.) can also live in the same `.env` file; see `.env.prod` for the full list.
 
-### Authentication audiences
+### Authentication configuration
 
-The authentication middleware matches Google and Apple ID tokens against the comma-separated values in the `GOOGLE_SIGN_IN_AUDIENCES` and `APPLE_SIGN_IN_AUDIENCES` environment variables. The defaults in `.env.prod` correspond to the production mobile apps—update them if you add new OAuth client IDs or bundle IDs.
+The authentication middleware verifies Google and Apple ID tokens against the `GOOGLE_OAUTH_CLIENT_ID` and `APPLE_AUDIENCE_BUNDLE_ID` environment variables. Set these to the client ID (Google) and bundle/service ID (Apple) used by your mobile apps. For local session JWTs, configure `SESSION_JWT_SECRET`.
 
 ## API Gateway authentication
 
