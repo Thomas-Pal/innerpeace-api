@@ -3,8 +3,9 @@ import express from 'express';
 import { availabilityHandler } from './routes/availability.js';
 import { createBooking, cancelBooking, updateBooking } from './routes/booking.js';
 import { listBookings } from './routes/bookings.js';
-import { listMedia, streamMedia } from './routes/media.js';
-import { authMiddleware } from './middleware/auth.js';
+import mediaRouter from './routes/media.js';
+import { authHandler } from './middleware/auth.js';
+import youtubeRouter from './routes/youtube.js';
 import { devLoggerMiddleware } from './middleware/devLogger.js';
 
 const app = express();
@@ -15,15 +16,13 @@ app.use(devLoggerMiddleware());
 
 app.get('/health', (_req, res) => res.status(200).send('ok'));
 
-const protectedMiddleware = authMiddleware();
-app.use(['/api/availability', '/api/bookings', '/api/book', '/api/media/list'], protectedMiddleware);
+app.use('/api/media', mediaRouter);
+app.use('/api/youtube', youtubeRouter);
 
-app.get('/api/availability', availabilityHandler);
-app.get('/api/bookings', listBookings);
-app.post('/api/book', createBooking);
-app.delete('/api/book/:id', cancelBooking);
-app.put('/api/book/:id', updateBooking);
-app.get('/api/media/list', listMedia);
-app.get('/api/media/stream/:id', streamMedia);
+app.get('/api/availability', authHandler, availabilityHandler);
+app.get('/api/bookings', authHandler, listBookings);
+app.post('/api/book', authHandler, createBooking);
+app.delete('/api/book/:id', authHandler, cancelBooking);
+app.put('/api/book/:id', authHandler, updateBooking);
 
 export default app;

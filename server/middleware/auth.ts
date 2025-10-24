@@ -1,8 +1,13 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { JWTPayload } from 'jose';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import {
+  createRemoteJWKSet,
+  decodeJwt,
+  decodeProtectedHeader,
+  jwtVerify,
+} from 'jose';
 
-type Provider = 'google' | 'apple';
+export type Provider = 'google' | 'apple' | 'session';
 
 export interface AuthenticatedUser {
   provider: Provider;
@@ -20,49 +25,13 @@ declare global {
   }
 }
 
-const APPLE_ISSUER = 'https://appleid.apple.com';
-const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
-
-const defaultAppleAudiences = ['com.innerpeace.app'];
-const defaultGoogleAudiences = [
-  '379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com',
-  '379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com',
-];
-
 const appleJWKS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
 const googleJWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
-function splitAudiences(value: string | undefined, fallback: string[]): string[] {
-  if (!value) return fallback;
-  return value
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
+const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
+const APPLE_ISSUER = 'https://appleid.apple.com';
 
-function getAudienceValue(audiences: string[]): string | string[] | undefined {
-  if (!audiences.length) return undefined;
-  if (audiences.length === 1) return audiences[0];
-  return audiences;
-}
-
-async function verifyAppleIdToken(token: string, audienceList: string[]): Promise<JWTPayload> {
-  const audience = getAudienceValue(audienceList);
-  const { payload } = await jwtVerify(token, appleJWKS, {
-    issuer: APPLE_ISSUER,
-    ...(audience ? { audience } : {}),
-  });
-  return payload;
-}
-
-async function verifyGoogleIdToken(token: string, audienceList: string[]): Promise<JWTPayload> {
-  const audience = getAudienceValue(audienceList);
-  const { payload } = await jwtVerify(token, googleJWKS, {
-    issuer: GOOGLE_ISSUERS,
-    ...(audience ? { audience } : {}),
-  });
-  return payload;
-}
+const textEncoder = new TextEncoder();
 
 function extractBearer(headerValue: string | undefined | null): string | null {
   if (!headerValue) return null;
@@ -70,67 +39,108 @@ function extractBearer(headerValue: string | undefined | null): string | null {
   return match ? match[1] : null;
 }
 
-function missingTokenResponse(res: Response, provider: Provider) {
-  const message = provider === 'apple' ? 'Missing Apple token' : 'Missing Google token';
-  return res.status(401).json({ message, code: 401 });
+async function verifyApple(idToken: string) {
+  const { payload } = await jwtVerify(idToken, appleJWKS, {
+    issuer: APPLE_ISSUER,
+    audience: process.env.APPLE_AUDIENCE_BUNDLE_ID,
+    algorithms: ['RS256'],
+  });
+  return payload;
 }
 
-export interface AuthMiddlewareOptions {
-  appleAudiences?: string[];
-  googleAudiences?: string[];
+async function verifyGoogle(idToken: string) {
+  const { payload } = await jwtVerify(idToken, googleJWKS, {
+    issuer: GOOGLE_ISSUERS,
+    audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
+    algorithms: ['RS256'],
+  });
+  return payload;
 }
 
-export function authMiddleware(options: AuthMiddlewareOptions = {}) {
-  const appleAudiences = options.appleAudiences ?? splitAudiences(process.env.APPLE_SIGN_IN_AUDIENCES, defaultAppleAudiences);
-  const googleAudiences =
-    options.googleAudiences ?? splitAudiences(process.env.GOOGLE_SIGN_IN_AUDIENCES, defaultGoogleAudiences);
+async function verifySession(idToken: string) {
+  const secret = process.env.SESSION_JWT_SECRET;
+  if (!secret) {
+    throw new Error('SESSION_JWT_SECRET is not configured');
+  }
+  const { payload } = await jwtVerify(idToken, textEncoder.encode(secret), {
+    algorithms: ['HS256'],
+  });
+  return payload;
+}
 
-  return async function authHandler(req: Request, res: Response, next: NextFunction) {
-    try {
-      const providerHeader = (req.header('x-auth-provider') || '').toLowerCase();
-      const explicitAppleToken = req.header('x-apple-identity-token');
-      const bearerToken = extractBearer(req.header('authorization'));
+function normalizeSubject(payload: JWTPayload): string {
+  const subject = (payload.sub ?? (payload as any).user_id ?? '').toString();
+  if (!subject) {
+    throw new Error('Token is missing subject');
+  }
+  return subject;
+}
 
-      let provider: Provider;
-      let token: string | null = null;
+function detectProviderFromToken(token: string): Provider {
+  const header = decodeProtectedHeader(token);
+  if (header.alg && header.alg.toUpperCase().startsWith('HS')) {
+    return 'session';
+  }
 
-      if (providerHeader === 'apple') {
-        provider = 'apple';
-        token = explicitAppleToken || bearerToken;
-        if (!token) return missingTokenResponse(res, provider);
-      } else if (providerHeader === 'google') {
-        provider = 'google';
-        token = bearerToken;
-        if (!token) return missingTokenResponse(res, provider);
-      } else if (explicitAppleToken) {
-        provider = 'apple';
-        token = explicitAppleToken;
-      } else if (bearerToken) {
-        provider = 'google';
-        token = bearerToken;
-      } else {
-        return res.status(401).json({ message: 'Missing authentication token', code: 401 });
-      }
+  const payload = decodeJwt(token);
+  const issuer = typeof payload.iss === 'string' ? payload.iss : '';
+  if (GOOGLE_ISSUERS.includes(issuer)) {
+    return 'google';
+  }
+  if (issuer === APPLE_ISSUER) {
+    return 'apple';
+  }
+  throw new Error('Unknown token issuer');
+}
 
-      const payload =
-        provider === 'apple'
-          ? await verifyAppleIdToken(token, appleAudiences)
-          : await verifyGoogleIdToken(token, googleAudiences);
+export async function authHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const providerHeader = (req.header('x-auth-provider') || '').toLowerCase();
+    const appleHeaderToken = req.header('x-apple-identity-token');
+    const bearerToken = extractBearer(req.header('authorization'));
 
-      const subject = (payload.sub || (payload as any).user_id || '').toString();
-      if (!subject) {
-        throw new Error('Token is missing subject');
-      }
+    let provider: Provider | null = null;
+    let token: string | null = null;
 
-      const email = typeof payload.email === 'string' ? payload.email : null;
-      req.user = { provider, uid: subject, email, claims: payload, token };
-
-      return next();
-    } catch (error) {
-      console.error('[auth] token verification failed', error);
-      return res.status(401).json({ message: 'Invalid token', code: 401 });
+    if (providerHeader === 'apple') {
+      provider = 'apple';
+      token = appleHeaderToken || bearerToken;
+    } else if (providerHeader === 'google') {
+      provider = 'google';
+      token = bearerToken;
+    } else if (providerHeader === 'session') {
+      provider = 'session';
+      token = bearerToken;
+    } else if (appleHeaderToken) {
+      provider = 'apple';
+      token = appleHeaderToken;
+    } else if (bearerToken) {
+      provider = detectProviderFromToken(bearerToken);
+      token = bearerToken;
     }
-  };
+
+    if (!provider || !token) {
+      return res.status(401).json({ message: 'Missing authentication token', code: 401 });
+    }
+
+    let payload: JWTPayload;
+    if (provider === 'apple') {
+      payload = await verifyApple(token);
+    } else if (provider === 'google') {
+      payload = await verifyGoogle(token);
+    } else {
+      payload = await verifySession(token);
+    }
+
+    const uid = normalizeSubject(payload);
+    const email = typeof payload.email === 'string' ? payload.email : null;
+
+    req.user = { provider, uid, email, claims: payload, token };
+    return next();
+  } catch (error) {
+    console.error('[auth] token verification failed', error);
+    return res.status(401).json({ message: 'Invalid token', code: 401 });
+  }
 }
 
 export function requireAuth(req: Request): AuthenticatedUser {
