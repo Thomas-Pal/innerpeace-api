@@ -27,8 +27,20 @@ The Google Drive integration expects the following variables:
 | `DRIVE_MEDIA_FOLDER_ID` | Default Drive folder ID to use when clients omit `?folderId=`. |
 | `MEDIA_ALLOWED_MIME` | Optional. Comma-separated MIME allowlist (defaults to `video/*,audio/*`). |
 | `MEDIA_CACHE_MAX_AGE` | Optional. Value for the `Cache-Control` header when streaming media. |
+| `GOOGLE_APPLICATION_CREDENTIALS` / `GOOGLE_CREDENTIALS_JSON` | Provide a Service Account key when running in CI/production. |
+| `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` | Optional. Service Account email to impersonate when using Application Default Credentials locally. |
 
 Any other configuration (Calendar delegation, port, etc.) can also live in the same `.env` file; see `.env.prod` for the full list.
+
+#### Local development without key files
+
+If you prefer not to store Service Account keys on disk, you can rely on [Application Default Credentials](https://cloud.google.com/docs/authentication/provide-credentials-adc) and Service Account impersonation:
+
+1. Grant your Google user the **Service Account Token Creator** role on the Drive Service Account.
+2. Run `gcloud auth application-default login --project <gcp-project>` and (optionally) `gcloud auth application-default set-quota-project <gcp-project>`.
+3. Set `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` to the email address of the Service Account shared on the Drive folder.
+
+When this variable is present, the media routes will mint short-lived tokens on behalf of the Service Account instead of requiring a JSON key.
 
 ### Authentication configuration
 

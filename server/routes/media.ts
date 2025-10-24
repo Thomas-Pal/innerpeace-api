@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { driveClientFromServiceAccount } from '../utils/googleClient.js';
+import { authHandler } from '../middleware/auth.js';
+import { driveClientFromRequest } from '../utils/googleClient.js';
 
 const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
 
@@ -12,6 +13,8 @@ function isAllowed(mimeType: string | undefined | null, allowed: string[]): bool
 
 const router = Router();
 
+router.use(authHandler);
+
 router.get('/list', async (req, res) => {
   try {
     const folderId = String(req.query.folderId || process.env.DRIVE_MEDIA_FOLDER_ID || '');
@@ -22,7 +25,7 @@ router.get('/list', async (req, res) => {
       ? allowedCsv.split(',').map((s) => s.trim()).filter(Boolean)
       : DEFAULT_ALLOWED;
 
-    const drive = await driveClientFromServiceAccount();
+    const drive = await driveClientFromRequest(req);
     const filesResponse = await drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
       fields: 'files(id,name,mimeType,webViewLink,webContentLink,thumbnailLink,size,createdTime)',
@@ -54,7 +57,7 @@ router.get('/stream/:id', async (req, res) => {
     const fileId = req.params.id;
     if (!fileId) return res.status(400).json({ error: 'file_id_required' });
 
-    const drive = await driveClientFromServiceAccount();
+    const drive = await driveClientFromRequest(req);
 
     const range = req.headers.range as string | undefined;
     console.log('[media:stream] fileId=%s range=%s', fileId, range ?? 'none');
