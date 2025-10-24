@@ -16,13 +16,13 @@ app.use(devLoggerMiddleware());
 
 app.get('/health', (_req, res) => res.status(200).send('ok'));
 
+app.use('/api/media', mediaRouter);
+app.use('/api/youtube', youtubeRouter);
+
 app.get('/api/availability', authHandler, availabilityHandler);
 app.get('/api/bookings', authHandler, listBookings);
 app.post('/api/book', authHandler, createBooking);
 app.delete('/api/book/:id', authHandler, cancelBooking);
 app.put('/api/book/:id', authHandler, updateBooking);
-
-app.use('/api/media', authHandler, mediaRouter);
-app.use('/api/youtube', youtubeRouter);
 
 export default app;
