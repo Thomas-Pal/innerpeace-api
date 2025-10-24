@@ -2,7 +2,6 @@ import type { Request } from 'express';
 import type { drive_v3 } from 'googleapis';
 import createError from 'http-errors';
 import { google } from 'googleapis';
-import { GoogleAuth, OAuth2Client } from 'google-auth-library';
 
 export async function calendarClientFromRequest(req: Request) {
   const userToken = req.header('x-oauth-access-token');
@@ -34,27 +33,27 @@ export async function calendarClientFromRequest(req: Request) {
   throw createError(401, 'Missing user access token and no DWD fallback configured');
 }
 
-export async function driveClientFromRequest(req: Request): Promise<drive_v3.Drive> {
-  const userAccessToken = req.header('x-oauth-access-token');
+const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.readonly'];
 
-  // Use user's Google access token when provided (Google sign-in)
-  if (userAccessToken) {
-    const oauth2 = new OAuth2Client();
-    oauth2.setCredentials({ access_token: userAccessToken });
-    return google.drive({ version: 'v3', auth: oauth2 });
+export function getServiceAccountAuth() {
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    return new google.auth.GoogleAuth({
+      credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON),
+      scopes: DRIVE_SCOPES,
+    });
   }
 
-  // Otherwise use Service Account via ADC or inline JSON
-  const hasInline = !!process.env.GOOGLE_CREDENTIALS_JSON;
-  const auth = new GoogleAuth({
-    credentials: hasInline ? JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON!) : undefined,
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-  });
-
-  if (!hasInline && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     throw new Error('No Google credentials configured. Set GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_CREDENTIALS_JSON.');
   }
 
-  await auth.getClient();
+  return new google.auth.GoogleAuth({
+    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    scopes: DRIVE_SCOPES,
+  });
+}
+
+export async function driveClientFromServiceAccount(): Promise<drive_v3.Drive> {
+  const auth = getServiceAccountAuth();
   return google.drive({ version: 'v3', auth });
 }

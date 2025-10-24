@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { driveClientFromRequest } from '../utils/googleClient.js';
+import { driveClientFromServiceAccount } from '../utils/googleClient.js';
 
 const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
 
@@ -22,13 +22,14 @@ router.get('/list', async (req, res) => {
       ? allowedCsv.split(',').map((s) => s.trim()).filter(Boolean)
       : DEFAULT_ALLOWED;
 
-    const drive = await driveClientFromRequest(req);
+    const drive = await driveClientFromServiceAccount();
     const filesResponse = await drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
       fields: 'files(id,name,mimeType,webViewLink,webContentLink,thumbnailLink,size,createdTime)',
       pageSize: 1000,
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
+      corpora: 'allDrives',
     });
 
     const files = (filesResponse.data.files ?? []).filter((file) =>
@@ -37,8 +38,14 @@ router.get('/list', async (req, res) => {
 
     res.json({ files, items: files });
   } catch (e: any) {
+    if (e?.code === 403) {
+      return res.status(403).json({
+        message:
+          'Service account lacks access to this folder/drive. Ensure the SA is a Viewer on the folder (or a member of the Shared drive).',
+      });
+    }
     console.error('[media:list] failed', e);
-    res.status(500).json({ message: e.message || 'media list failed' });
+    res.status(500).json({ message: 'Failed to load media' });
   }
 });
 
@@ -47,7 +54,7 @@ router.get('/stream/:id', async (req, res) => {
     const fileId = req.params.id;
     if (!fileId) return res.status(400).json({ error: 'file_id_required' });
 
-    const drive = await driveClientFromRequest(req);
+    const drive = await driveClientFromServiceAccount();
 
     const range = req.headers.range as string | undefined;
     console.log('[media:stream] fileId=%s range=%s', fileId, range ?? 'none');
