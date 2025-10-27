@@ -14,7 +14,9 @@ const router = Router();
 
 router.get('/list', async (req, res) => {
   try {
-    const folderId = String(req.query.folderId || process.env.DRIVE_MEDIA_FOLDER_ID || '');
+    const folderId = String(
+      req.query.folderId || process.env.DRIVE_MEDIA_FOLDER_ID || process.env.DRIVE_PARENT_FOLDER_ID || '',
+    );
     if (!folderId) return res.status(400).json({ message: 'folderId is required' });
 
     const allowedCsv = process.env.MEDIA_ALLOWED_MIME || '';

@@ -12,8 +12,8 @@ This service is an Express application that loads configuration from environment
    ```bash
    cp .env.prod .env
    ```
-2. Edit `.env` and populate the required secrets. The Google Drive private key must keep the literal `\n` newlines when stored in a single-line `.env` entry.
-3. Start the API (`npm run dev` or `npm run start`). The file is loaded automatically by `server/index.ts` via `import 'dotenv/config'`.
+2. Edit `.env` and populate the required secrets. The Google Drive private key must keep the literal `\n` newlines when stored in a single-line `.env` entry. You can create an additional `.env.local` to override any values for your machine; it is loaded automatically in development.
+3. Start the API (`npm run dev` or `npm run start`). Environment files are loaded automatically by `server/config/loadEnv.ts` when the process boots.
 
 > **Note**
 > If you deploy to Cloud Run or another managed environment, set the same variables in the service configuration instead of using a `.env` file.

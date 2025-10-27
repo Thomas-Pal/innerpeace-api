@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './config/loadEnv.js';
 import app from './app.js';
 import config, { targetCalendarId } from './config/environment.js';
 
