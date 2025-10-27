@@ -5,8 +5,6 @@ info:
 schemes: ["https"]
 produces: ["application/json"]
 
-# Accept either Google ID tokens (Authorization: Bearer <id_token>)
-# or Apple ID tokens (x-apple-identity-token: <id_token>)
 securityDefinitions:
   google_id_token:
     type: oauth2
@@ -14,7 +12,6 @@ securityDefinitions:
     authorizationUrl: ""
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
-    # Your mobile + web client IDs, comma-separated
     x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
 
   apple_id_token:
@@ -23,31 +20,24 @@ securityDefinitions:
     authorizationUrl: ""
     x-google-issuer: "https://appleid.apple.com"
     x-google-jwks_uri: "https://appleid.apple.com/auth/keys"
-    # For native iOS, aud is your bundle id
     x-google-audiences: "com.innerpeace.app"
-    # IMPORTANT: use header/cookie/query keys; do NOT use "in/name"
     x-google-jwt-locations:
       - header: x-apple-identity-token
-      - header: Authorization    # ok if the app sends Apple token in Authorization
+      - header: Authorization
 
-# “Any-of” security: request is authorized if one of these passes.
 security:
   - google_id_token: []
   - apple_id_token: []
-
-# Back-end URL (Cloud Run service URL) – used as the audience for the
-# identity token Gateway sends to Cloud Run.
-x-backend-url: "https://innerpeace-api-379484922687.europe-west2.run.app"
 
 paths:
   /health:
     get:
       operationId: healthCheck
-      security: []   # public
+      security: []
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -58,9 +48,9 @@ paths:
         - { name: start, in: query, type: string, required: false }
         - { name: end,   in: query, type: string, required: false }
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -68,9 +58,9 @@ paths:
     post:
       operationId: createBooking
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -80,9 +70,9 @@ paths:
       parameters:
         - { name: uid, in: query, type: string, required: false }
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -92,9 +82,9 @@ paths:
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -104,39 +94,34 @@ paths:
       parameters:
         - { name: folderId, in: query, type: string, required: false }
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
   /api/media/stream/{id}:
     get:
       operationId: streamMedia
-      security: []   # public streaming OK
+      security: []
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
         "206": { description: "Partial content" }
 
-  # You were getting 404s because this route was missing
   /api/youtube/channel/{id}:
     get:
       operationId: getYoutubeChannel
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:
-        address: "$$x-backend-url$$"
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "$$x-backend-url$$"
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
-
-# Templating for our reuse above
-x-templates:
-  x-backend-url: "https://innerpeace-api-379484922687.europe-west2.run.app"
