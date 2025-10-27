@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { authHandler } from '../middleware/auth.js';
 import { driveClientFromRequest } from '../utils/googleClient.js';
 
 const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
@@ -12,8 +11,6 @@ function isAllowed(mimeType: string | undefined | null, allowed: string[]): bool
 }
 
 const router = Router();
-
-router.use(authHandler);
 
 router.get('/list', async (req, res) => {
   try {
