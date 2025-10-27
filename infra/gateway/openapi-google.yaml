@@ -4,7 +4,7 @@ info:
   version: "1.0.0"
 schemes: ["https"]
 
-# --- Auth schemes ---
+# Accept EITHER Google ID token OR Apple identity token
 securityDefinitions:
   google_id_token:
     type: oauth2
@@ -12,12 +12,8 @@ securityDefinitions:
     authorizationUrl: ""
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
-    # Both your iOS and Android client IDs (add others if you have them)
+    # Both your iOS client IDs so either can be the 'aud'
     x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
-    x-google-jwt-locations:
-      - in: header
-        name: Authorization
-        value_prefix: "Bearer "
 
   apple_id_token:
     type: oauth2
@@ -25,11 +21,20 @@ securityDefinitions:
     authorizationUrl: ""
     x-google-issuer: "https://appleid.apple.com"
     x-google-jwks_uri: "https://appleid.apple.com/auth/keys"
+    # Your bundle ID is the Apple 'aud'
     x-google-audiences: "com.innerpeace.app"
-    # IMPORTANT: do NOT look in Authorization (your app uses it for session JWTs)
+    # Accept in a custom header OR Authorization
     x-google-jwt-locations:
       - in: header
         name: x-apple-identity-token
+      - in: header
+        name: Authorization
+        value_prefix: "Bearer "
+
+# OR semantics across array entries:
+security:
+  - google_id_token: []
+  - apple_id_token: []
 
 paths:
   /health:
@@ -39,7 +44,6 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -49,26 +53,18 @@ paths:
       parameters:
         - { name: start, in: query, type: string, required: false }
         - { name: end,   in: query, type: string, required: false }
-      security:
-        - google_id_token: []
-        - apple_id_token: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
   /api/book:
     post:
       operationId: createBooking
-      security:
-        - google_id_token: []
-        - apple_id_token: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -77,13 +73,9 @@ paths:
       operationId: listBookings
       parameters:
         - { name: uid, in: query, type: string, required: false }
-      security:
-        - google_id_token: []
-        - apple_id_token: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -92,13 +84,9 @@ paths:
       operationId: deleteBooking
       parameters:
         - { name: id, in: path, required: true, type: string }
-      security:
-        - google_id_token: []
-        - apple_id_token: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -107,13 +95,9 @@ paths:
       operationId: listMedia
       parameters:
         - { name: folderId, in: query, type: string, required: false }
-      security:
-        - google_id_token: []
-        - apple_id_token: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
 
@@ -126,24 +110,18 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
         "206": { description: "Partial content" }
 
-  # Missing route that caused 404s earlier
+  # Add YouTube proxy so gateway stops returning 404
   /api/youtube/channel/{channelId}:
     get:
-      operationId: youtubeChannel
+      operationId: getYoutubeChannelFeed
       parameters:
-        - name: channelId
-          in: path
-          required: true
-          type: string
-      security: []   # public (you’re proxying a public feed)
+        - { name: channelId, in: path, required: true, type: string }
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
