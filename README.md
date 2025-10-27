@@ -4,12 +4,16 @@ This service is an Express application that loads configuration from environment
 
 ## Setting environment variables
 
-1. Copy the production defaults file and fill in the values that apply to your deployment:
+1. Copy the example file and fill in the values that apply to your deployment:
+   ```bash
+   cp .env.example .env
+   ```
+   You can also start from the production defaults if you prefer:
    ```bash
    cp .env.prod .env
    ```
-2. Edit `.env` and populate the required secrets. The Google Drive private key must keep the literal `\n` newlines when stored in a single-line `.env` entry.
-3. Start the API (`npm run dev` or `npm run start`). The file is loaded automatically by `server/index.ts` via `import 'dotenv/config'`.
+2. Edit `.env` and populate the required secrets. The Google Drive private key must keep the literal `\n` newlines when stored in a single-line `.env` entry. You can create an additional `.env.local` to override any values for your machine; it is loaded automatically in development.
+3. Start the API (`npm run dev` or `npm run start`). Environment files are loaded automatically by `server/config/loadEnv.ts` when the process boots.
 
 > **Note**
 > If you deploy to Cloud Run or another managed environment, set the same variables in the service configuration instead of using a `.env` file.
@@ -20,15 +24,27 @@ The Google Drive integration expects the following variables:
 
 | Variable | Description |
 | --- | --- |
-| `DRIVE_FOLDER_ID` | Default Drive folder ID to use when clients omit `?folderId=`. |
+| `DRIVE_MEDIA_FOLDER_ID` | Default Drive folder ID to use when clients omit `?folderId=`. |
 | `MEDIA_ALLOWED_MIME` | Optional. Comma-separated MIME allowlist (defaults to `video/*,audio/*`). |
 | `MEDIA_CACHE_MAX_AGE` | Optional. Value for the `Cache-Control` header when streaming media. |
+| `GOOGLE_APPLICATION_CREDENTIALS` / `GOOGLE_CREDENTIALS_JSON` | Provide a Service Account key when running in CI/production. |
+| `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` | Optional. Service Account email to impersonate when using Application Default Credentials locally. |
 
 Any other configuration (Calendar delegation, port, etc.) can also live in the same `.env` file; see `.env.prod` for the full list.
 
-### Authentication audiences
+#### Local development without key files
 
-The authentication middleware matches Google and Apple ID tokens against the comma-separated values in the `GOOGLE_SIGN_IN_AUDIENCES` and `APPLE_SIGN_IN_AUDIENCES` environment variables. The defaults in `.env.prod` correspond to the production mobile apps—update them if you add new OAuth client IDs or bundle IDs.
+If you prefer not to store Service Account keys on disk, you can rely on [Application Default Credentials](https://cloud.google.com/docs/authentication/provide-credentials-adc) and Service Account impersonation:
+
+1. Grant your Google user the **Service Account Token Creator** role on the Drive Service Account.
+2. Run `gcloud auth application-default login --project <gcp-project>` and (optionally) `gcloud auth application-default set-quota-project <gcp-project>`.
+3. Set `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` to the email address of the Service Account shared on the Drive folder.
+
+When this variable is present, the media routes will mint short-lived tokens on behalf of the Service Account instead of requiring a JSON key.
+
+### Authentication configuration
+
+The authentication middleware verifies Google and Apple ID tokens against the `GOOGLE_OAUTH_CLIENT_ID` and `APPLE_AUDIENCE_BUNDLE_ID` environment variables. Set these to the client ID (Google) and bundle/service ID (Apple) used by your mobile apps. For local session JWTs, configure `SESSION_JWT_SECRET`.
 
 ## API Gateway authentication
 
