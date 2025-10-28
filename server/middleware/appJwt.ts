@@ -1,6 +1,7 @@
 import type { Request, RequestHandler } from 'express';
 import type { JWTPayload } from 'jose';
 import { verifyAppJwt } from '../utils/appJwt.js';
+import { readAppJwtWithSource } from '../utils/readAppJwt.js';
 
 export interface AppJwtAuthContext {
   token: string;
@@ -20,27 +21,6 @@ declare global {
       };
     }
   }
-}
-
-function extractBearer(headerValue?: string | null): string | null {
-  if (!headerValue) return null;
-  const match = /^Bearer\s+(.+)$/i.exec(headerValue.trim());
-  return match ? match[1] : null;
-}
-
-function getAppJwtFromRequest(req: Request): string | null {
-  const bearer = extractBearer(req.header('authorization'));
-  if (bearer) {
-    return bearer;
-  }
-
-  const headerValue = req.header('x-app-jwt');
-  if (!headerValue) {
-    return null;
-  }
-
-  const trimmed = headerValue.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 function normalizeRoles(claims: JWTPayload): string[] {
@@ -72,12 +52,7 @@ function extractUserId(claims: JWTPayload): string {
   throw new Error('App JWT is missing a subject or userId claim');
 }
 
-async function resolveAppJwt(req: Request): Promise<AppJwtAuthContext | null> {
-  const token = getAppJwtFromRequest(req);
-  if (!token) {
-    return null;
-  }
-
+async function resolveAppJwt(token: string): Promise<AppJwtAuthContext> {
   const claims = await verifyAppJwt(token);
   const userId = extractUserId(claims);
   const roles = normalizeRoles(claims);
@@ -96,42 +71,56 @@ function ensureContext(req: Request) {
   }
 }
 
+function logJwtTrace(req: Request, source: string | null, token: string | null) {
+  const entry = {
+    source,
+    hasToken: Boolean(token),
+    tokenSuffix: token ? token.slice(-6) : null,
+    path: req.originalUrl || req.path,
+    method: req.method,
+  };
+  console.log('[appjwt]', entry);
+}
+
 export const maybeAppJwt: RequestHandler = async (req, _res, next) => {
+  const { token, source } = readAppJwtWithSource(req);
+  logJwtTrace(req, source, token);
+
+  if (!token) {
+    req.auth = null;
+    ensureContext(req);
+    return next();
+  }
+
   try {
-    const auth = await resolveAppJwt(req);
-    req.auth = auth;
+    req.auth = await resolveAppJwt(token);
   } catch (error) {
     console.warn('[appJwt] failed to verify token', error);
     req.auth = null;
-  } finally {
-    ensureContext(req);
-    next();
   }
+
+  ensureContext(req);
+  return next();
 };
 
 export const requireAppJwt: RequestHandler = async (req, res, next) => {
-  try {
-    const existing = req.auth;
-    if (existing) {
-      ensureContext(req);
-      next();
-      return;
-    }
+  const { token, source } = readAppJwtWithSource(req);
+  logJwtTrace(req, source, token);
 
-    const auth = await resolveAppJwt(req);
-    if (!auth) {
-      ensureContext(req);
-      res.status(401).json({ code: 401, message: 'Missing app token' });
-      return;
-    }
-
-    req.auth = auth;
+  if (!token) {
+    req.auth = null;
     ensureContext(req);
-    next();
+    return res.status(401).json({ code: 401, message: 'Jwt is missing' });
+  }
+
+  try {
+    req.auth = await resolveAppJwt(token);
+    ensureContext(req);
+    return next();
   } catch (error) {
     console.error('[appJwt] token verification failed', error);
     req.auth = null;
     ensureContext(req);
-    res.status(401).json({ code: 401, message: 'Invalid app token' });
+    return res.status(401).json({ code: 401, message: 'Invalid JWT' });
   }
 };

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authHandler } from '../middleware/auth.js';
-import { requireAppJwt } from '../middleware/appJwt.js';
+import { maybeAppJwt, requireAppJwt } from '../middleware/appJwt.js';
 import { driveClientFromRequest } from '../utils/googleClient.js';
 
 const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
@@ -53,7 +53,7 @@ router.get('/list', requireAppJwt, authHandler, async (req, res) => {
   }
 });
 
-router.get('/stream/:id', async (req, res) => {
+router.get('/stream/:id', maybeAppJwt, async (req, res) => {
   try {
     const fileId = req.params.id;
     if (!fileId) return res.status(400).json({ error: 'file_id_required' });
