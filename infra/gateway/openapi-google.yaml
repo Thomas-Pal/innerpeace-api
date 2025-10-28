@@ -5,6 +5,7 @@ info:
 schemes: ["https"]
 produces: ["application/json"]
 
+# Auth config
 securityDefinitions:
   google_id_token:
     type: oauth2
@@ -12,7 +13,11 @@ securityDefinitions:
     authorizationUrl: ""
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
+    # Both your iOS and Android OAuth client IDs (comma separated)
     x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
+    # IMPORTANT: read Google ID tokens from a separate header so it never collides with your app JWT
+    x-google-jwt-locations:
+      - header: x-google-id-token
 
   apple_id_token:
     type: oauth2
@@ -25,6 +30,7 @@ securityDefinitions:
       - header: x-apple-identity-token
       - header: Authorization
 
+# Default requirement: user must present a valid ID token
 security:
   - google_id_token: []
   - apple_id_token: []
@@ -33,7 +39,7 @@ paths:
   /health:
     get:
       operationId: healthCheck
-      security: []
+      security: []   # public health check
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -103,7 +109,7 @@ paths:
   /api/media/stream/{id}:
     get:
       operationId: streamMedia
-      security: []
+      security: []  # public so range requests & caching work cleanly
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:
@@ -117,6 +123,7 @@ paths:
   /api/youtube/channel/{id}:
     get:
       operationId: getYoutubeChannel
+      security: []  # public; these are public feeds and app hits them pre-auth
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:
