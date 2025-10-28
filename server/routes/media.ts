@@ -14,7 +14,7 @@ function isAllowed(mimeType: string | undefined | null, allowed: string[]): bool
 
 const router = Router();
 
-router.get('/list', requireAppJwt, authHandler, async (req, res) => {
+router.get('/list', requireAppJwt(), authHandler, async (req, res) => {
   try {
     const folderId = String(
       req.query.folderId || process.env.DRIVE_MEDIA_FOLDER_ID || process.env.DRIVE_PARENT_FOLDER_ID || '',
@@ -53,7 +53,7 @@ router.get('/list', requireAppJwt, authHandler, async (req, res) => {
   }
 });
 
-router.get('/stream/:id', maybeAppJwt, async (req, res) => {
+router.get('/stream/:id', maybeAppJwt(), async (req, res) => {
   try {
     const fileId = req.params.id;
     if (!fileId) return res.status(400).json({ error: 'file_id_required' });
