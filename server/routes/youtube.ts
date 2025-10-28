@@ -5,7 +5,7 @@ import { maybeAppJwt } from '../middleware/appJwt.js';
 
 const router = Router();
 
-router.get('/channel/:channelId', maybeAppJwt, async (req, res) => {
+router.get('/channel/:channelId', maybeAppJwt(), async (req, res) => {
   try {
     const { channelId } = req.params;
     const url = `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;
