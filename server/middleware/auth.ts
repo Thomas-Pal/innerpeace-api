@@ -14,13 +14,14 @@ export interface AuthenticatedUser {
   uid: string;
   email: string | null;
   claims: JWTPayload;
-  token: string;
+  token: string | null;
 }
 
 declare global {
   namespace Express {
     interface Request {
       user?: AuthenticatedUser;
+      appJwt?: string | null;
     }
   }
 }
@@ -37,6 +38,21 @@ function extractBearer(headerValue: string | undefined | null): string | null {
   if (!headerValue) return null;
   const match = /^Bearer\s+(.+)$/i.exec(headerValue.trim());
   return match ? match[1] : null;
+}
+
+function extractHeaderToken(headerValue: string | undefined | null): string | null {
+  if (!headerValue) return null;
+  const trimmed = headerValue.trim();
+  if (!trimmed) return null;
+  const withoutBearer = trimmed.replace(/^Bearer\s+/i, '');
+  return withoutBearer.replace(/^"+|"+$/g, '') || null;
+}
+
+function decodeBase64Url(value: string): string {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padding = normalized.length % 4;
+  const padded = padding ? normalized + '='.repeat(4 - padding) : normalized;
+  return Buffer.from(padded, 'base64').toString('utf8');
 }
 
 async function verifyApple(idToken: string) {
@@ -95,28 +111,61 @@ function detectProviderFromToken(token: string): Provider {
 
 export async function authHandler(req: Request, res: Response, next: NextFunction) {
   try {
+    const authorizationBearer = extractBearer(req.header('authorization'));
+    const googleHeaderToken = extractHeaderToken(req.header('x-google-id-token'));
+    const appleHeaderToken = extractHeaderToken(req.header('x-apple-identity-token'));
+
+    const gatewayUserInfo = req.header('x-endpoint-api-userinfo');
+    if (gatewayUserInfo) {
+      try {
+        const claims = JSON.parse(decodeBase64Url(gatewayUserInfo)) as JWTPayload;
+        const issuer = typeof claims.iss === 'string' ? claims.iss : '';
+        const provider: Provider = GOOGLE_ISSUERS.includes(issuer)
+          ? 'google'
+          : issuer === APPLE_ISSUER
+          ? 'apple'
+          : 'session';
+
+        const uid = normalizeSubject(claims);
+        const email = typeof claims.email === 'string' ? claims.email : null;
+
+        req.user = {
+          provider,
+          uid,
+          email,
+          claims,
+          token: provider === 'google' ? googleHeaderToken : provider === 'apple' ? appleHeaderToken : authorizationBearer,
+        };
+        req.appJwt = authorizationBearer;
+        return next();
+      } catch (err) {
+        console.error('[auth] failed to parse X-Endpoint-API-UserInfo header', err);
+      }
+    }
+
     const providerHeader = (req.header('x-auth-provider') || '').toLowerCase();
-    const appleHeaderToken = req.header('x-apple-identity-token');
-    const bearerToken = extractBearer(req.header('authorization'));
 
     let provider: Provider | null = null;
     let token: string | null = null;
 
     if (providerHeader === 'apple') {
       provider = 'apple';
-      token = appleHeaderToken || bearerToken;
+      token = appleHeaderToken || authorizationBearer;
     } else if (providerHeader === 'google') {
       provider = 'google';
-      token = bearerToken;
+      token = googleHeaderToken || authorizationBearer;
     } else if (providerHeader === 'session') {
       provider = 'session';
-      token = bearerToken;
+      token = authorizationBearer;
     } else if (appleHeaderToken) {
       provider = 'apple';
       token = appleHeaderToken;
-    } else if (bearerToken) {
-      provider = detectProviderFromToken(bearerToken);
-      token = bearerToken;
+    } else if (googleHeaderToken) {
+      provider = 'google';
+      token = googleHeaderToken;
+    } else if (authorizationBearer) {
+      provider = detectProviderFromToken(authorizationBearer);
+      token = authorizationBearer;
     }
 
     if (!provider || !token) {
@@ -136,6 +185,7 @@ export async function authHandler(req: Request, res: Response, next: NextFunctio
     const email = typeof payload.email === 'string' ? payload.email : null;
 
     req.user = { provider, uid, email, claims: payload, token };
+    req.appJwt = authorizationBearer;
     return next();
   } catch (error) {
     console.error('[auth] token verification failed', error);
