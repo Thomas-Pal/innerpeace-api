@@ -7,22 +7,26 @@ import mediaRouter from './routes/media.js';
 import { authHandler } from './middleware/auth.js';
 import youtubeRouter from './routes/youtube.js';
 import { devLoggerMiddleware } from './middleware/devLogger.js';
+import { maybeAppJwt, requireAppJwt } from './middleware/appJwt.js';
+import { readProviderContext, requestLogMiddleware } from './middleware/requestContext.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use(devLoggerMiddleware());
+app.use(readProviderContext);
+app.use(requestLogMiddleware);
 
-app.get('/health', (_req, res) => res.status(200).send('ok'));
+app.get('/health', maybeAppJwt, (_req, res) => res.status(200).send('ok'));
 
-app.use('/api/media', mediaRouter);
-app.use('/api/youtube', youtubeRouter);
+app.use('/api/media', maybeAppJwt, mediaRouter);
+app.use('/api/youtube', maybeAppJwt, youtubeRouter);
 
-app.get('/api/availability', authHandler, availabilityHandler);
-app.get('/api/bookings', authHandler, listBookings);
-app.post('/api/book', authHandler, createBooking);
-app.delete('/api/book/:id', authHandler, cancelBooking);
-app.put('/api/book/:id', authHandler, updateBooking);
+app.get('/api/availability', requireAppJwt, authHandler, availabilityHandler);
+app.get('/api/bookings', requireAppJwt, authHandler, listBookings);
+app.post('/api/book', requireAppJwt, authHandler, createBooking);
+app.delete('/api/book/:id', requireAppJwt, authHandler, cancelBooking);
+app.put('/api/book/:id', requireAppJwt, authHandler, updateBooking);
 
 export default app;

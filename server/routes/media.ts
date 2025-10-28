@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authHandler } from '../middleware/auth.js';
+import { requireAppJwt } from '../middleware/appJwt.js';
 import { driveClientFromRequest } from '../utils/googleClient.js';
 
 const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
@@ -13,7 +14,7 @@ function isAllowed(mimeType: string | undefined | null, allowed: string[]): bool
 
 const router = Router();
 
-router.get('/list', authHandler, async (req, res) => {
+router.get('/list', requireAppJwt, authHandler, async (req, res) => {
   try {
     const folderId = String(
       req.query.folderId || process.env.DRIVE_MEDIA_FOLDER_ID || process.env.DRIVE_PARENT_FOLDER_ID || '',
