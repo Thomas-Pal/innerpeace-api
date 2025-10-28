@@ -6,6 +6,7 @@ import {
   decodeProtectedHeader,
   jwtVerify,
 } from 'jose';
+import { verifyAppJwt } from '../utils/appJwt.js';
 
 export type Provider = 'google' | 'apple' | 'session';
 
@@ -43,8 +44,6 @@ const GOOGLE_AUDIENCES: string[] = [
   '379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com',
   '379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com',
 ];
-
-const textEncoder = new TextEncoder();
 
 function extractBearer(headerValue?: string | null): string | null {
   if (!headerValue) return null;
@@ -103,25 +102,16 @@ async function verifyGoogle(idToken: string) {
   return payload;
 }
 
-async function verifySession(idToken: string) {
-  const secret = process.env.SESSION_JWT_SECRET;
-  if (!secret) {
-    throw new Error('SESSION_JWT_SECRET is not configured');
-  }
-  const { payload } = await jwtVerify(idToken, textEncoder.encode(secret), {
-    algorithms: ['HS256'],
-  });
-  return payload;
-}
-
 export async function authHandler(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
   try {
+    const bearerFromAuth = extractBearer(req.header('authorization'));
     const appJwtHeader = req.header('x-app-jwt');
-    const appJwt = appJwtHeader ? appJwtHeader.trim() || null : null;
+    const headerToken = appJwtHeader ? appJwtHeader.trim() || null : null;
+    const appJwt = headerToken || bearerFromAuth || null;
     req.appJwt = appJwt;
 
     const gatewayUserInfo = req.header('x-endpoint-api-userinfo');
@@ -195,7 +185,7 @@ export async function authHandler(
     } else if (provider === 'apple') {
       claims = await verifyApple(tokenForVerification);
     } else {
-      claims = await verifySession(tokenForVerification);
+      claims = await verifyAppJwt(tokenForVerification);
     }
 
     const uid = normalizeSubject(claims);
