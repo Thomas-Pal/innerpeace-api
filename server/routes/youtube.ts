@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import fetch from 'node-fetch';
 import { parseStringPromise } from 'xml2js';
+import { maybeAppJwt } from '../middleware/appJwt.js';
 
 const router = Router();
 
-router.get('/channel/:channelId', async (req, res) => {
+router.get('/channel/:channelId', maybeAppJwt, async (req, res) => {
   try {
     const { channelId } = req.params;
     const url = `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;

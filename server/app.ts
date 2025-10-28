@@ -20,8 +20,8 @@ app.use(requestLogMiddleware);
 
 app.get('/health', maybeAppJwt, (_req, res) => res.status(200).send('ok'));
 
-app.use('/api/media', maybeAppJwt, mediaRouter);
-app.use('/api/youtube', maybeAppJwt, youtubeRouter);
+app.use('/api/media', mediaRouter);
+app.use('/api/youtube', youtubeRouter);
 
 app.get('/api/availability', requireAppJwt, authHandler, availabilityHandler);
 app.get('/api/bookings', requireAppJwt, authHandler, listBookings);

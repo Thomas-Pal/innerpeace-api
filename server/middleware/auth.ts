@@ -7,6 +7,7 @@ import {
   jwtVerify,
 } from 'jose';
 import { verifyAppJwt } from '../utils/appJwt.js';
+import { readAppJwt } from '../utils/readAppJwt.js';
 
 export type Provider = 'google' | 'apple' | 'session';
 
@@ -108,10 +109,7 @@ export async function authHandler(
   next: NextFunction,
 ) {
   try {
-    const bearerFromAuth = extractBearer(req.header('authorization'));
-    const appJwtHeader = req.header('x-app-jwt');
-    const headerToken = appJwtHeader ? appJwtHeader.trim() || null : null;
-    const appJwt = headerToken || bearerFromAuth || null;
+    const appJwt = readAppJwt(req);
     req.appJwt = appJwt;
 
     const gatewayUserInfo = req.header('x-endpoint-api-userinfo');
