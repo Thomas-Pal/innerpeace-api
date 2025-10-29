@@ -17,7 +17,7 @@ async function getCalendarOr401(req: Request, res: Response) {
   } catch (error: any) {
     const status = error?.status || error?.response?.status;
     if (status === 401) {
-      res.status(401).json({ code: 401, message: 'Missing JWT' });
+      res.status(401).json({ code: 401, message: 'Missing Authorization' });
       return null;
     }
     throw error;

@@ -33,22 +33,18 @@ The backend now talks to Google APIs exclusively through a dedicated Service Acc
 
 ### Authentication configuration
 
-API requests are authenticated with the InnerPeace app JWT. Set the issuer, audience, and JWKS endpoint so both the gateway and backend validate the same tokens:
+API requests are authenticated with Supabase access tokens. Configure the Supabase project reference so both the gateway and backend validate the same issuer and audience:
 
 | Variable | Description |
 | --- | --- |
-| `APP_JWT_ISSUER` | Issuer claim expected in app JWTs (default `https://innerpeace.app`). |
-| `APP_JWT_AUDIENCE` | Audience claim expected in app JWTs (default `innerpeace-app`). |
-| `APP_JWKS_URI` | Optional override for the JWKS endpoint. Defaults to `<issuer>/.well-known/jwks.json`. |
-| `APP_JWT_PRIVATE_KEY_PEM` | PKCS#8 PEM used to mint first-party app tokens. |
-| `APP_JWT_PUBLIC_JWK` | Public JWK published at `/.well-known/jwks.json` for verifiers (safe to share). |
-| `APP_JWT_KID` | Key ID advertised in minted tokens and JWKS responses. |
+| `SUPABASE_PROJECT_REF` | Supabase project ref (e.g. `abcd1234`). Used to build the issuer `https://<ref>.supabase.co/auth/v1`. |
+| `SUPABASE_AUD` | Optional override for the expected audience (defaults to `authenticated`). |
+
+All protected requests must send a single header: `Authorization: Bearer <supabase_access_token>`.
 
 ## API Gateway authentication
 
-Protected endpoints are fronted by Google Cloud API Gateway. The OpenAPI definition in `infra/gateway/openapi-google.yaml` now defines an `app_jwt` security scheme that reads tokens from either the `x-app-jwt` header or the `Authorization: Bearer` header.
-
-The API publishes its signing keys at `/.well-known/jwks.json` and exposes `POST /auth/mint` for clients that need to exchange a federated identity for an Innerpeace app JWT. Ensure the same issuer domain fronts both endpoints so Cloud API Gateway can fetch the JWKS.
+Protected endpoints are fronted by Google Cloud API Gateway. The OpenAPI definition in `infra/gateway/openapi-google.yaml` configures ESPv2 to validate Supabase JWTs from the `Authorization` header.
 
 To roll out changes, update the API config and redeploy the gateway:
 
@@ -69,14 +65,11 @@ gcloud api-gateway gateways update innerpeace-gateway \
 
 ### Quick verification
 
-After deploying the new config, confirm that both header styles reach the backend:
+After deploying the new config, confirm requests succeed with a Supabase access token:
 
 ```bash
-curl -i "$GATEWAY_HOST/api/media/list?folderId=test" \
-  -H "x-app-jwt: $APP_JWT"
-
-curl -i "$GATEWAY_HOST/api/media/list?folderId=test" \
-  -H "Authorization: Bearer $APP_JWT"
+curl -i "$GATEWAY_HOST/api/bookings?uid=<SUPABASE_UID>" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 ```
 
-Either request should return the backend response (HTTP 200/4xx). A `jwt_authn_access_denied{Jwt_is_missing}` error indicates the gateway config still needs to be updated.
+The response should be a 200 (or an application error), not a 401. A `jwt_authn_access_denied{Jwt_is_missing}` error indicates the gateway config still needs to be updated.

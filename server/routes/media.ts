@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireUser } from '../middleware/auth.js';
+import { requireUser } from '../middleware/auth.js';
 import { getDriveClient, listDriveMedia } from '../../src/services/drive.js';
 
 const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
@@ -13,7 +13,7 @@ function isAllowed(mimeType: string | undefined | null, allowed: string[]): bool
 
 const router = Router();
 
-router.get('/list', requireAuth, async (req, res) => {
+router.get('/list', async (req, res) => {
   try {
     const folderId = String(
       req.query.folderId || process.env.DRIVE_MEDIA_FOLDER_ID || process.env.DRIVE_PARENT_FOLDER_ID || '',
@@ -26,7 +26,7 @@ router.get('/list', requireAuth, async (req, res) => {
       : DEFAULT_ALLOWED;
 
     const user = requireUser(req);
-    const files = (await listDriveMedia(folderId, { userId: user.sub })).filter((file) =>
+    const files = (await listDriveMedia(folderId)).filter((file) =>
       isAllowed(file.mimeType, allowed),
     );
 
