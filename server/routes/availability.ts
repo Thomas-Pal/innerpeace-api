@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { getCalendarClient } from '../utils/googleClient.js';
+import { getCalendarClient } from '../utils/googleCalendar.js';
 import { requireUser } from '../middleware/auth.js';
 import { targetCalendarId } from '../config/environment.js';
 
