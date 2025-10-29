@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { authHandler } from '../middleware/auth.js';
-import { maybeAppJwt, requireAppJwt } from '../middleware/appJwt.js';
-import { driveClientFromRequest } from '../utils/googleClient.js';
+import { requireAuth, requireUser } from '../middleware/auth.js';
+import { getDriveClient, listDriveMedia } from '../../src/services/drive.js';
 
 const DEFAULT_ALLOWED = ['video/*', 'audio/*'];
 
@@ -14,7 +13,7 @@ function isAllowed(mimeType: string | undefined | null, allowed: string[]): bool
 
 const router = Router();
 
-router.get('/list', requireAppJwt(), authHandler, async (req, res) => {
+router.get('/list', requireAuth, async (req, res) => {
   try {
     const folderId = String(
       req.query.folderId || process.env.DRIVE_MEDIA_FOLDER_ID || process.env.DRIVE_PARENT_FOLDER_ID || '',
@@ -26,17 +25,8 @@ router.get('/list', requireAppJwt(), authHandler, async (req, res) => {
       ? allowedCsv.split(',').map((s) => s.trim()).filter(Boolean)
       : DEFAULT_ALLOWED;
 
-    const drive = await driveClientFromRequest(req);
-    const filesResponse = await drive.files.list({
-      q: `'${folderId}' in parents and trashed = false`,
-      fields: 'files(id,name,mimeType,webViewLink,webContentLink,thumbnailLink,size,createdTime)',
-      pageSize: 1000,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      corpora: 'allDrives',
-    });
-
-    const files = (filesResponse.data.files ?? []).filter((file) =>
+    const user = requireUser(req);
+    const files = (await listDriveMedia(folderId, { userId: user.sub })).filter((file) =>
       isAllowed(file.mimeType, allowed),
     );
 
@@ -53,12 +43,12 @@ router.get('/list', requireAppJwt(), authHandler, async (req, res) => {
   }
 });
 
-router.get('/stream/:id', maybeAppJwt(), async (req, res) => {
+router.get('/stream/:id', async (req, res) => {
   try {
     const fileId = req.params.id;
     if (!fileId) return res.status(400).json({ error: 'file_id_required' });
 
-    const drive = await driveClientFromRequest(req);
+    const drive = await getDriveClient();
 
     const range = req.headers.range as string | undefined;
     console.log('[media:stream] fileId=%s range=%s', fileId, range ?? 'none');

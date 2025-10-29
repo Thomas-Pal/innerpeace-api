@@ -2,8 +2,8 @@ import type { Request, RequestHandler } from 'express';
 
 type MaybeAuthedRequest = Request & {
   user?: {
-    provider: string;
-    uid: string;
+    provider?: string;
+    sub?: string;
   };
 };
 
@@ -20,9 +20,9 @@ const summarizeUser = (req: MaybeAuthedRequest): string => {
   if (!req.user) {
     return 'anon';
   }
-  const provider = req.user.provider || 'unknown';
-  const uid = req.user.uid || 'unknown';
-  const suffix = uid.length > 8 ? `${uid.slice(0, 4)}…${uid.slice(-4)}` : uid;
+  const provider = req.user.provider || 'app';
+  const subject = req.user.sub || 'unknown';
+  const suffix = subject.length > 8 ? `${subject.slice(0, 4)}…${subject.slice(-4)}` : subject;
   return `${provider}:${suffix}`;
 };
 
