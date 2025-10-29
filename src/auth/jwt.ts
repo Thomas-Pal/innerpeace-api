@@ -2,7 +2,13 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
 const APP_JWT_ISSUER = process.env.APP_JWT_ISSUER || 'https://innerpeace.app';
 const APP_JWT_AUDIENCE = process.env.APP_JWT_AUDIENCE || 'innerpeace-app';
-const APP_JWKS_URI = process.env.APP_JWKS_URI || 'https://innerpeace.app/.well-known/jwks.json';
+
+function buildDefaultJwksUri(issuer: string): string {
+  const trimmed = issuer.replace(/\/+$/, '');
+  return `${trimmed}/.well-known/jwks.json`;
+}
+
+const APP_JWKS_URI = process.env.APP_JWKS_URI || buildDefaultJwksUri(APP_JWT_ISSUER);
 
 const jwks = createRemoteJWKSet(new URL(APP_JWKS_URI));
 

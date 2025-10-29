@@ -39,11 +39,16 @@ API requests are authenticated with the InnerPeace app JWT. Set the issuer, audi
 | --- | --- |
 | `APP_JWT_ISSUER` | Issuer claim expected in app JWTs (default `https://innerpeace.app`). |
 | `APP_JWT_AUDIENCE` | Audience claim expected in app JWTs (default `innerpeace-app`). |
-| `APP_JWKS_URI` | HTTPS URL that serves the signing keys in JWKS format. |
+| `APP_JWKS_URI` | Optional override for the JWKS endpoint. Defaults to `<issuer>/.well-known/jwks.json`. |
+| `APP_JWT_PRIVATE_KEY_PEM` | PKCS#8 PEM used to mint first-party app tokens. |
+| `APP_JWT_PUBLIC_JWK` | Public JWK published at `/.well-known/jwks.json` for verifiers (safe to share). |
+| `APP_JWT_KID` | Key ID advertised in minted tokens and JWKS responses. |
 
 ## API Gateway authentication
 
 Protected endpoints are fronted by Google Cloud API Gateway. The OpenAPI definition in `infra/gateway/openapi-google.yaml` now defines an `app_jwt` security scheme that reads tokens from either the `x-app-jwt` header or the `Authorization: Bearer` header.
+
+The API publishes its signing keys at `/.well-known/jwks.json` and exposes `POST /auth/mint` for clients that need to exchange a federated identity for an Innerpeace app JWT. Ensure the same issuer domain fronts both endpoints so Cloud API Gateway can fetch the JWKS.
 
 To roll out changes, update the API config and redeploy the gateway:
 
