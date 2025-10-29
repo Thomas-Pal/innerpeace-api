@@ -15,5 +15,5 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
 EXPOSE 8080
-# With tsconfig { rootDir: "server", outDir: "dist" }, the entry is dist/index.js
-CMD ["node","dist/index.js"]
+# With server sources emitted under dist/server/, the entry is dist/server/index.js
+CMD ["node","dist/server/index.js"]
