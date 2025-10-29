@@ -7,12 +7,13 @@ schemes: ["https"]
 produces: ["application/json"]
 basePath: "/"
 
-# Default: all ops require Supabase JWT unless overridden with security: []
+# Require either Supabase JWT OR an API key (we won't actually send the key).
 security:
   - supabase_jwt: []
+  - api_key: []
 
-# ===== Auth: Supabase access token validation =====
 securityDefinitions:
+  # Supabase access token (one-token flow via Supabase)
   supabase_jwt:
     type: oauth2
     flow: implicit
@@ -23,8 +24,13 @@ securityDefinitions:
     x-google-jwt-locations:
       - header: "Authorization"
         value_prefix: "Bearer "
+  # Dummy API key to satisfy API Gateway validator (not required by your client)
+  api_key:
+    type: apiKey
+    name: x-api-key
+    in: header
 
-# ===== Cloud Run backend (applies to all paths) =====
+# Cloud Run backend applied globally
 x-google-backend:
   address: "https://innerpeace-api-379484922687.europe-west2.run.app"
   path_translation: APPEND_PATH_TO_ADDRESS
@@ -35,14 +41,12 @@ paths:
   /healthz:
     get:
       operationId: healthCheck
-      security: []
-      x-google-api-key: false
+      security: []   # public
       responses:
         "200": { description: OK }
     options:
       operationId: healthPreflight
-      security: []
-      x-google-api-key: false
+      security: []   # public preflight
       responses:
         "204": { description: CORS preflight }
 
@@ -50,8 +54,7 @@ paths:
   /api/youtube/channel/{id}:
     get:
       operationId: getYoutubeChannel
-      security: []
-      x-google-api-key: false
+      security: []   # public
       parameters:
         - name: id
           in: path
@@ -61,17 +64,19 @@ paths:
         "200": { description: OK }
     options:
       operationId: youtubePreflight
-      security: []
-      x-google-api-key: false
-      # NOTE: no parameters on OPTIONS (fixes protobuf Empty/id error)
+      security: []   # public preflight
+      parameters:
+        - name: id          # IMPORTANT: declare same path param to avoid google.protobuf.Empty error
+          in: path
+          required: true
+          type: string
       responses:
         "204": { description: CORS preflight }
 
-  # ---- Availability: PROTECTED ----
+  # ---- Availability: PROTECTED (JWT or api_key) ----
   /api/availability:
     get:
       operationId: getAvailability
-      x-google-api-key: false
       parameters:
         - name: start
           in: query
@@ -85,8 +90,7 @@ paths:
         "200": { description: OK }
     options:
       operationId: availabilityPreflight
-      security: []
-      x-google-api-key: false
+      security: []   # public preflight
       responses:
         "204": { description: CORS preflight }
 
@@ -94,7 +98,6 @@ paths:
   /api/bookings:
     get:
       operationId: listBookings
-      x-google-api-key: false
       parameters:
         - name: uid
           in: query
@@ -104,20 +107,17 @@ paths:
         "200": { description: OK }
     post:
       operationId: createBooking
-      x-google-api-key: false
       responses:
         "200": { description: OK }
     options:
       operationId: bookingsPreflight
-      security: []
-      x-google-api-key: false
+      security: []   # public preflight
       responses:
         "204": { description: CORS preflight }
 
   /api/bookings/{id}:
     delete:
       operationId: deleteBooking
-      x-google-api-key: false
       parameters:
         - name: id
           in: path
@@ -127,7 +127,6 @@ paths:
         "200": { description: OK }
     put:
       operationId: updateBooking
-      x-google-api-key: false
       parameters:
         - name: id
           in: path
@@ -137,9 +136,12 @@ paths:
         "200": { description: OK }
     options:
       operationId: bookingsIdPreflight
-      security: []
-      x-google-api-key: false
-      # NOTE: no parameters on OPTIONS
+      security: []   # public preflight
+      parameters:
+        - name: id        # IMPORTANT: declare same path param
+          in: path
+          required: true
+          type: string
       responses:
         "204": { description: CORS preflight }
 
@@ -147,7 +149,6 @@ paths:
   /api/media/list:
     get:
       operationId: listMedia
-      x-google-api-key: false
       parameters:
         - name: folderId
           in: query
@@ -157,15 +158,13 @@ paths:
         "200": { description: OK }
     options:
       operationId: mediaListPreflight
-      security: []
-      x-google-api-key: false
+      security: []   # public preflight
       responses:
         "204": { description: CORS preflight }
 
   /api/media/stream/{id}:
     get:
       operationId: streamMedia
-      x-google-api-key: false
       parameters:
         - name: id
           in: path
@@ -176,8 +175,11 @@ paths:
         "206": { description: Partial content }
     options:
       operationId: mediaStreamPreflight
-      security: []
-      x-google-api-key: false
-      # NOTE: no parameters on OPTIONS
+      security: []   # public preflight
+      parameters:
+        - name: id      # IMPORTANT: declare same path param
+          in: path
+          required: true
+          type: string
       responses:
         "204": { description: CORS preflight }
