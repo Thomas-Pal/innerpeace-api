@@ -14,8 +14,8 @@ securityDefinitions:
     type: oauth2
     flow: implicit
     authorizationUrl: ""
-    x-google-issuer: "https://https://pnqnlqjkcslkiodsdjhe.supabase.co.supabase.co/auth/v1"
-    x-google-jwks_uri: "https://https://pnqnlqjkcslkiodsdjhe.supabase.co.supabase.co/auth/v1/keys"
+    x-google-issuer: "https://pnqnlqjkcslkiodsdjhe.supabase.co.supabase.co/auth/v1"
+    x-google-jwks_uri: "https://pnqnlqjkcslkiodsdjhe.supabase.co.supabase.co/auth/v1/keys"
     x-google-audiences: "authenticated"
     x-google-jwt-locations:
       - header: "Authorization"
