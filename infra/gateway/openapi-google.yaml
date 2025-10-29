@@ -36,40 +36,42 @@ paths:
     get:
       operationId: healthCheck
       security: []
+      x-google-api-key: false
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     options:
       operationId: healthPreflight
       security: []
+      x-google-api-key: false
       responses:
-        "204":
-          description: CORS preflight
+        "204": { description: CORS preflight }
 
   # ---- YouTube: PUBLIC ----
   /api/youtube/channel/{id}:
     get:
       operationId: getYoutubeChannel
       security: []
+      x-google-api-key: false
       parameters:
         - name: id
           in: path
           required: true
           type: string
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     options:
       operationId: youtubePreflight
       security: []
+      x-google-api-key: false
+      # NOTE: no parameters on OPTIONS (fixes protobuf Empty/id error)
       responses:
-        "204":
-          description: CORS preflight
+        "204": { description: CORS preflight }
 
   # ---- Availability: PROTECTED ----
   /api/availability:
     get:
       operationId: getAvailability
+      x-google-api-key: false
       parameters:
         - name: start
           in: query
@@ -80,112 +82,102 @@ paths:
           required: false
           type: string
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     options:
       operationId: availabilityPreflight
       security: []
+      x-google-api-key: false
       responses:
-        "204":
-          description: CORS preflight
+        "204": { description: CORS preflight }
 
   # ---- Bookings: PROTECTED ----
   /api/bookings:
     get:
       operationId: listBookings
+      x-google-api-key: false
       parameters:
         - name: uid
           in: query
           required: false
           type: string
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     post:
       operationId: createBooking
+      x-google-api-key: false
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     options:
       operationId: bookingsPreflight
       security: []
+      x-google-api-key: false
       responses:
-        "204":
-          description: CORS preflight
+        "204": { description: CORS preflight }
 
   /api/bookings/{id}:
     delete:
       operationId: deleteBooking
+      x-google-api-key: false
       parameters:
         - name: id
           in: path
           required: true
           type: string
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     put:
       operationId: updateBooking
+      x-google-api-key: false
       parameters:
         - name: id
           in: path
           required: true
           type: string
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     options:
       operationId: bookingsIdPreflight
       security: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      x-google-api-key: false
+      # NOTE: no parameters on OPTIONS
       responses:
-        "204":
-          description: CORS preflight
+        "204": { description: CORS preflight }
 
   # ---- Media: PROTECTED ----
   /api/media/list:
     get:
       operationId: listMedia
+      x-google-api-key: false
       parameters:
         - name: folderId
           in: query
           required: false
           type: string
       responses:
-        "200":
-          description: OK
+        "200": { description: OK }
     options:
       operationId: mediaListPreflight
       security: []
+      x-google-api-key: false
       responses:
-        "204":
-          description: CORS preflight
+        "204": { description: CORS preflight }
 
   /api/media/stream/{id}:
     get:
       operationId: streamMedia
+      x-google-api-key: false
       parameters:
         - name: id
           in: path
           required: true
           type: string
       responses:
-        "200":
-          description: OK
-        "206":
-          description: Partial content
+        "200": { description: OK }
+        "206": { description: Partial content }
     options:
       operationId: mediaStreamPreflight
       security: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      x-google-api-key: false
+      # NOTE: no parameters on OPTIONS
       responses:
-        "204":
-          description: CORS preflight
+        "204": { description: CORS preflight }
