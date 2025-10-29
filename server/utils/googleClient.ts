@@ -1,7 +1,9 @@
 import { JWT } from 'google-auth-library';
 
-function normalizeKey(k: string) {
-  const normalized = k.trim().replace(/\\n/g, '\n');
+function normalizeKey(rawKey: string | undefined) {
+  if (!rawKey) return '';
+
+  const normalized = rawKey.trim().replace(/\\n/g, '\n');
   if (!normalized) return normalized;
 
   try {
@@ -11,12 +13,25 @@ function normalizeKey(k: string) {
   return normalized;
 }
 
-const GOOGLE_SA_EMAIL = process.env.GOOGLE_SA_EMAIL;
-if (!GOOGLE_SA_EMAIL) {
-  throw new Error('GOOGLE_SA_EMAIL is not configured');
+let cachedCredentials: { email: string; key: string } | null = null;
+
+function resolveServiceAccount() {
+  if (cachedCredentials) {
+    return cachedCredentials;
+  }
+
+  const email = process.env.GOOGLE_SA_EMAIL?.trim();
+  const key = normalizeKey(process.env.GOOGLE_SA_KEY);
+
+  if (!email || !key) {
+    throw new Error('Google service account credentials are not configured. Set GOOGLE_SA_EMAIL and GOOGLE_SA_KEY.');
+  }
+
+  cachedCredentials = { email, key };
+  return cachedCredentials;
 }
-const GOOGLE_SA_KEY = normalizeKey(process.env.GOOGLE_SA_KEY || '');
 
 export function getSaJwt(scopes: string[]) {
-  return new JWT({ email: GOOGLE_SA_EMAIL, key: GOOGLE_SA_KEY, scopes });
+  const { email, key } = resolveServiceAccount();
+  return new JWT({ email, key, scopes });
 }
