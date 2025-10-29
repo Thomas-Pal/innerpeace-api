@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import type { calendar_v3 } from 'googleapis';
-import { getCalendarClient } from '../utils/googleClient.js';
+import { getCalendarClient } from '../utils/googleCalendar.js';
 import { requireUser } from '../middleware/auth.js';
 import config, { targetCalendarId } from '../config/environment.js';
 import { pickMeetUrl } from '../utils/events.js';
