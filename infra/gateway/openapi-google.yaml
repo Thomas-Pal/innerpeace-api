@@ -7,26 +7,24 @@ schemes: ["https"]
 produces: ["application/json"]
 basePath: "/"
 
-# Default: all operations require a Supabase JWT unless they override with `security: []`
+# Default: all ops require Supabase JWT unless overridden with security: []
 security:
   - supabase_jwt: []
 
-# ======== AUTH: Supabase Access Token (JWT) =========
+# ===== Auth: Supabase access token validation =====
 securityDefinitions:
   supabase_jwt:
     type: oauth2
     flow: implicit
     authorizationUrl: ""   # ignored by ESPv2
-    x-google-issuer: "https://YOUR_SUPABASE_PROJECT_REF.supabase.co/auth/v1"
-    x-google-jwks_uri: "https://YOUR_SUPABASE_PROJECT_REF.supabase.co/auth/v1/keys"
-    # Supabase access tokens typically have aud = "authenticated"
+    x-google-issuer: "https://pnqnlqjkcslkiodsdjhe.supabase.co/auth/v1"
+    x-google-jwks_uri: "https://pnqnlqjkcslkiodsdjhe.supabase.co/auth/v1/keys"
     x-google-audiences: "authenticated"
-    # Look for the token in Authorization: Bearer <token>
     x-google-jwt-locations:
       - header: "Authorization"
         value_prefix: "Bearer "
 
-# ======== Backend (Cloud Run) set once at top-level =========
+# ===== Cloud Run backend (applies to all paths) =====
 x-google-backend:
   address: "https://innerpeace-api-379484922687.europe-west2.run.app"
   path_translation: APPEND_PATH_TO_ADDRESS
@@ -37,30 +35,22 @@ paths:
   /healthz:
     get:
       operationId: healthCheck
-      security: []           # public
+      security: []
       responses:
         "200":
           description: OK
-
-  # ---- CORS preflight: PUBLIC (lets OPTIONS pass without auth) ----
-  /{p*}:
     options:
-      operationId: corsPreflight
-      security: []           # never require auth for preflight
-      parameters:
-        - name: p
-          in: path
-          required: false
-          type: string
+      operationId: healthPreflight
+      security: []
       responses:
         "204":
-          description: CORS preflight passthrough
+          description: CORS preflight
 
   # ---- YouTube: PUBLIC ----
   /api/youtube/channel/{id}:
     get:
       operationId: getYoutubeChannel
-      security: []           # public
+      security: []
       parameters:
         - name: id
           in: path
@@ -69,12 +59,17 @@ paths:
       responses:
         "200":
           description: OK
+    options:
+      operationId: youtubePreflight
+      security: []
+      responses:
+        "204":
+          description: CORS preflight
 
   # ---- Availability: PROTECTED ----
   /api/availability:
     get:
       operationId: getAvailability
-      # inherits supabase_jwt protection from top-level
       parameters:
         - name: start
           in: query
@@ -87,6 +82,12 @@ paths:
       responses:
         "200":
           description: OK
+    options:
+      operationId: availabilityPreflight
+      security: []
+      responses:
+        "204":
+          description: CORS preflight
 
   # ---- Bookings: PROTECTED ----
   /api/bookings:
@@ -105,6 +106,12 @@ paths:
       responses:
         "200":
           description: OK
+    options:
+      operationId: bookingsPreflight
+      security: []
+      responses:
+        "204":
+          description: CORS preflight
 
   /api/bookings/{id}:
     delete:
@@ -127,6 +134,17 @@ paths:
       responses:
         "200":
           description: OK
+    options:
+      operationId: bookingsIdPreflight
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        "204":
+          description: CORS preflight
 
   # ---- Media: PROTECTED ----
   /api/media/list:
@@ -140,6 +158,12 @@ paths:
       responses:
         "200":
           description: OK
+    options:
+      operationId: mediaListPreflight
+      security: []
+      responses:
+        "204":
+          description: CORS preflight
 
   /api/media/stream/{id}:
     get:
@@ -154,3 +178,14 @@ paths:
           description: OK
         "206":
           description: Partial content
+    options:
+      operationId: mediaStreamPreflight
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        "204":
+          description: CORS preflight
