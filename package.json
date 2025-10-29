@@ -2,12 +2,12 @@
   "name": "innerpeace-api",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/server/index.js",
   "scripts": {
     "prestart": "npm run build",
     "dev": "tsx watch server/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "node dist/server/index.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "dependencies": {
