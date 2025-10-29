@@ -6,6 +6,8 @@ import { listBookings } from './routes/bookings.js';
 import mediaRouter from './routes/media.js';
 import { requireAuth } from './middleware/auth.js';
 import youtubeRouter from './routes/youtube.js';
+import jwksRoute from './routes/jwks.js';
+import authMint from './routes/authMint.js';
 import { devLoggerMiddleware } from './middleware/devLogger.js';
 import { readProviderContext, requestLogMiddleware } from './middleware/requestContext.js';
 
@@ -34,6 +36,9 @@ if (process.env.NODE_ENV !== 'production') {
     res.sendStatus(404);
   });
 }
+
+app.use(jwksRoute);
+app.use(authMint);
 
 app.use('/api/media', mediaRouter);
 app.use('/api/youtube', youtubeRouter);
