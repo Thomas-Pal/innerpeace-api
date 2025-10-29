@@ -33,7 +33,7 @@ export const requestLogMiddleware: RequestHandler = (req, res, next) => {
       path: req.originalUrl,
       provider,
       hasId: Boolean(idTokenSource),
-      hasAppJwt: Boolean(req.auth),
+      hasAppJwt: Boolean(req.user),
     };
     console.log('[req]', entry);
   });

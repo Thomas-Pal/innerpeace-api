@@ -6,32 +6,25 @@ schemes: ["https"]
 produces: ["application/json"]
 
 securityDefinitions:
+  app_jwt:
+    type: oauth2
+    flow: implicit
+    authorizationUrl: ""
+    x-google-issuer: "https://innerpeace.app"
+    x-google-jwks_uri: "https://innerpeace.app/.well-known/jwks.json"
+    x-google-audiences: "innerpeace-app"
+    x-google-jwt-locations:
+      - header: "x-app-jwt"
+      - header: "Authorization"
+        value_prefix: "Bearer "
+
   google_id_token:
     type: oauth2
     flow: implicit
     authorizationUrl: ""
     x-google-issuer: "https://accounts.google.com"
     x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
-    x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com,379484922687-j3bc9264v49hpqloi98897jbfg0acjjm.apps.googleusercontent.com"
-    # FE must send a RAW JWT here (no "Bearer ")
-    x-google-jwt-locations:
-      - header: x-google-id-token
-
-  apple_id_token:
-    type: oauth2
-    flow: implicit
-    authorizationUrl: ""
-    x-google-issuer: "https://appleid.apple.com"
-    x-google-jwks_uri: "https://appleid.apple.com/auth/keys"
-    x-google-audiences: "com.innerpeace.app"
-    # IMPORTANT: Do NOT read from Authorization; avoid colliding with your app JWT
-    x-google-jwt-locations:
-      - header: x-apple-identity-token
-
-# Either Google OR Apple ID token is acceptable by default
-security:
-  - google_id_token: []
-  - apple_id_token: []
+    x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com"
 
 paths:
   /health:
@@ -48,6 +41,9 @@ paths:
   /api/availability:
     get:
       operationId: getAvailability
+      security:
+        - app_jwt: []
+        - google_id_token: []
       parameters:
         - { name: start, in: query, type: string, required: false }
         - { name: end,   in: query, type: string, required: false }
@@ -61,6 +57,9 @@ paths:
   /api/book:
     post:
       operationId: createBooking
+      security:
+        - app_jwt: []
+        - google_id_token: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -71,6 +70,9 @@ paths:
   /api/bookings:
     get:
       operationId: listBookings
+      security:
+        - app_jwt: []
+        - google_id_token: []
       parameters:
         - { name: uid, in: query, type: string, required: false }
       x-google-backend:
@@ -83,6 +85,9 @@ paths:
   /api/book/{id}:
     delete:
       operationId: deleteBooking
+      security:
+        - app_jwt: []
+        - google_id_token: []
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:
@@ -95,6 +100,9 @@ paths:
   /api/media/list:
     get:
       operationId: listMedia
+      security:
+        - app_jwt: []
+        - google_id_token: []
       parameters:
         - { name: folderId, in: query, type: string, required: false }
       x-google-backend:

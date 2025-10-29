@@ -1,14 +1,14 @@
 import type { Request, Response } from 'express';
 import type { calendar_v3 } from 'googleapis';
-import { calendarClientFromRequest } from '../utils/googleClient.js';
-import { requireAuth } from '../middleware/auth.js';
+import { getCalendarClient } from '../utils/googleClient.js';
+import { requireUser } from '../middleware/auth.js';
 import { targetCalendarId } from '../config/environment.js';
 import { pickMeetUrl } from '../utils/events.js';
 
 export async function listBookings(req: Request, res: Response) {
   try {
-    requireAuth(req);
-    const calendar = await calendarClientFromRequest(req);
+    requireUser(req);
+    const calendar = await getCalendarClient();
 
     const now = new Date().toISOString();
     const events = await calendar.events.list({
@@ -39,7 +39,7 @@ export async function listBookings(req: Request, res: Response) {
   } catch (error: unknown) {
     const status = (error as any)?.status || (error as any)?.response?.status;
     if (status === 401) {
-      return res.status(401).json({ code: 401, message: 'Missing user token' });
+      return res.status(401).json({ code: 401, message: 'Missing JWT' });
     }
 
     console.error(

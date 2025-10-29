@@ -18,40 +18,32 @@ This service is an Express application that loads configuration from environment
 > **Note**
 > If you deploy to Cloud Run or another managed environment, set the same variables in the service configuration instead of using a `.env` file.
 
-### Google Drive media proxy values
+### Google integrations
 
-The Google Drive integration expects the following variables:
+The backend now talks to Google APIs exclusively through a dedicated Service Account. Configure the following variables for both local development and Cloud Run:
 
 | Variable | Description |
 | --- | --- |
+| `GOOGLE_PROJECT_ID` | Google Cloud project ID that owns the Service Account. |
+| `GOOGLE_SA_EMAIL` | Service Account email with access to Calendar and Drive. |
+| `GOOGLE_SA_KEY` | Private key for the Service Account. Accepts the raw PEM (with `\n`) or a base64-encoded blob. |
 | `DRIVE_MEDIA_FOLDER_ID` | Default Drive folder ID to use when clients omit `?folderId=`. |
 | `MEDIA_ALLOWED_MIME` | Optional. Comma-separated MIME allowlist (defaults to `video/*,audio/*`). |
 | `MEDIA_CACHE_MAX_AGE` | Optional. Value for the `Cache-Control` header when streaming media. |
-| `GOOGLE_APPLICATION_CREDENTIALS` / `GOOGLE_CREDENTIALS_JSON` | Provide a Service Account key when running in CI/production. |
-| `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` | Optional. Service Account email to impersonate when using Application Default Credentials locally. |
-
-Any other configuration (Calendar delegation, port, etc.) can also live in the same `.env` file; see `.env.prod` for the full list.
-
-#### Local development without key files
-
-If you prefer not to store Service Account keys on disk, you can rely on [Application Default Credentials](https://cloud.google.com/docs/authentication/provide-credentials-adc) and Service Account impersonation:
-
-1. Grant your Google user the **Service Account Token Creator** role on the Drive Service Account.
-2. Run `gcloud auth application-default login --project <gcp-project>` and (optionally) `gcloud auth application-default set-quota-project <gcp-project>`.
-3. Set `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` to the email address of the Service Account shared on the Drive folder.
-
-When this variable is present, the media routes will mint short-lived tokens on behalf of the Service Account instead of requiring a JSON key.
 
 ### Authentication configuration
 
-The authentication middleware verifies Google and Apple ID tokens against the `GOOGLE_OAUTH_CLIENT_ID` and `APPLE_AUDIENCE_BUNDLE_ID` environment variables. Set these to the client ID (Google) and bundle/service ID (Apple) used by your mobile apps. For local session JWTs, configure `SESSION_JWT_SECRET`.
+API requests are authenticated with the InnerPeace app JWT. Set the issuer, audience, and JWKS endpoint so both the gateway and backend validate the same tokens:
+
+| Variable | Description |
+| --- | --- |
+| `APP_JWT_ISSUER` | Issuer claim expected in app JWTs (default `https://innerpeace.app`). |
+| `APP_JWT_AUDIENCE` | Audience claim expected in app JWTs (default `innerpeace-app`). |
+| `APP_JWKS_URI` | HTTPS URL that serves the signing keys in JWKS format. |
 
 ## API Gateway authentication
 
-Protected endpoints are fronted by Google Cloud API Gateway. The OpenAPI definition in `infra/gateway/openapi-google.yaml` trusts ID tokens from **either** Google Sign-In or Apple Sign In:
-
-- `google_id_token` validates tokens issued by `https://accounts.google.com` against the Drive & Calendar web client IDs.
-- `apple_id_token` validates tokens issued by `https://appleid.apple.com` for the iOS bundle ID (`com.innerpeace.app`). It also accepts tokens delivered either via the `Authorization: Bearer <token>` header or the `x-apple-identity-token` header so the native app can keep its current request shape.
+Protected endpoints are fronted by Google Cloud API Gateway. The OpenAPI definition in `infra/gateway/openapi-google.yaml` now defines an `app_jwt` security scheme that reads tokens from either the `x-app-jwt` header or the `Authorization: Bearer` header.
 
 To roll out changes, update the API config and redeploy the gateway:
 
@@ -70,24 +62,16 @@ gcloud api-gateway gateways update innerpeace-gateway \
   --project=$PROJECT_ID
 ```
 
-If you add new Google client IDs or Apple bundle/service IDs, update both the OpenAPI audiences and the middleware environment variables before redeploying.
-
 ### Quick verification
 
+After deploying the new config, confirm that both header styles reach the backend:
+
 ```bash
-# Apple token via Authorization header
 curl -i "$GATEWAY_HOST/api/media/list?folderId=test" \
-  -H "x-auth-provider: apple" \
-  -H "Authorization: Bearer $APPLE_ID_TOKEN"
+  -H "x-app-jwt: $APP_JWT"
 
-# Apple token via x-apple-identity-token
 curl -i "$GATEWAY_HOST/api/media/list?folderId=test" \
-  -H "x-auth-provider: apple" \
-  -H "x-apple-identity-token: $APPLE_ID_TOKEN"
-
-# Google ID token
-curl -i "$GATEWAY_HOST/api/media/list?folderId=test" \
-  -H "Authorization: Bearer $GOOGLE_ID_TOKEN"
+  -H "Authorization: Bearer $APP_JWT"
 ```
 
-Each command should return `200` when using a valid token.
+Either request should return the backend response (HTTP 200/4xx). A `jwt_authn_access_denied{Jwt_is_missing}` error indicates the gateway config still needs to be updated.

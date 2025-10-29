@@ -1,23 +1,19 @@
 # Gateway Auth Examples
 
-Use these examples to verify Google API Gateway is forwarding the expected headers to Cloud Run.
+Use these examples to verify Google Cloud API Gateway accepts the InnerPeace app JWT from either supported header.
 
-## Google Sign-In Path
+## x-app-jwt header
 
 ```bash
-curl -i "https://<gw>/api/bookings?uid=100197224540858081628" \
-  -H "x-auth-provider: google" \
-  -H "x-google-id-token: $GOOGLE_ID_TOKEN" \
-  -H "x-app-jwt: $APP_JWT" \
+curl -i "https://<gateway-host>/api/media/list?folderId=<DRIVE_FOLDER>" \
+  -H "x-app-jwt: $APP_JWT"
+```
+
+## Authorization header
+
+```bash
+curl -i "https://<gateway-host>/api/media/list?folderId=<DRIVE_FOLDER>" \
   -H "Authorization: Bearer $APP_JWT"
 ```
 
-## Apple Sign-In Path
-
-```bash
-curl -i "https://<gw>/api/media/list?folderId=XYZ" \
-  -H "x-auth-provider: apple" \
-  -H "x-apple-identity-token: $APPLE_ID_TOKEN" \
-  -H "x-app-jwt: $APP_JWT" \
-  -H "Authorization: Bearer $APP_JWT"
-```
+Each request should reach the backend (HTTP 200/4xx from the service). A `jwt_authn_access_denied{Jwt_is_missing}` response indicates the gateway config has not been updated yet.

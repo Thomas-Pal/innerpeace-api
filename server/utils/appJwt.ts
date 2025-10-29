@@ -1,1 +1,1 @@
-export { verifyAppJwt } from '../../src/auth/verify.js';
+export { verifyAppJwt } from '../../src/auth/jwt.js';
