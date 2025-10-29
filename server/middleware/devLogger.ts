@@ -8,12 +8,10 @@ type MaybeAuthedRequest = Request & {
 };
 
 const summarizeAuthHeaders = (req: Request): string => {
-  const providerHeader = (req.headers['x-auth-provider'] || '').toString() || 'none';
   const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.trim().length > 0;
-  const hasGoogleOauth = typeof req.headers['x-oauth-access-token'] === 'string';
-  const hasAppleToken = typeof req.headers['x-apple-identity-token'] === 'string';
+  const hasEspUserInfo = typeof req.headers['x-endpoint-api-userinfo'] === 'string';
 
-  return `provider=${providerHeader} bearer=${hasBearer ? 'yes' : 'no'} oauth=${hasGoogleOauth ? 'yes' : 'no'} apple=${hasAppleToken ? 'yes' : 'no'}`;
+  return `bearer=${hasBearer ? 'yes' : 'no'} esp_userinfo=${hasEspUserInfo ? 'yes' : 'no'}`;
 };
 
 const summarizeUser = (req: MaybeAuthedRequest): string => {

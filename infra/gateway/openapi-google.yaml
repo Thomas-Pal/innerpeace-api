@@ -1,95 +1,31 @@
 swagger: "2.0"
 info:
-  title: innerpeace-api
+  title: InnerPeace API
   version: "1.0.0"
+
 schemes: ["https"]
 produces: ["application/json"]
 
+security:
+  - supabase_jwt: []
+
 securityDefinitions:
-  app_jwt:
+  supabase_jwt:
     type: oauth2
     flow: implicit
     authorizationUrl: ""
-    x-google-issuer: "https://innerpeace.app"
-    x-google-jwks_uri: "https://innerpeace.app/.well-known/jwks.json"
-    x-google-audiences: "innerpeace-app"
+    x-google-issuer: "https://abcd1234.supabase.co/auth/v1"
+    x-google-jwks_uri: "https://abcd1234.supabase.co/auth/v1/keys"
+    x-google-audiences: "authenticated"
     x-google-jwt-locations:
-      - header: "x-app-jwt"
       - header: "Authorization"
         value_prefix: "Bearer "
 
-  google_id_token:
-    type: oauth2
-    flow: implicit
-    authorizationUrl: ""
-    x-google-issuer: "https://accounts.google.com"
-    x-google-jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
-    x-google-audiences: "379484922687-q7ge8kg89o0vi1gn1lkjaqciu8e8e3eb.apps.googleusercontent.com"
-
 paths:
-  /health:
+  /healthz:
     get:
       operationId: healthCheck
-      security: []   # public
-      x-google-backend:
-        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
-        path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses:
-        "200": { description: "OK" }
-
-  /api/availability:
-    get:
-      operationId: getAvailability
-      security:
-        - app_jwt: []
-        - google_id_token: []
-      parameters:
-        - { name: start, in: query, type: string, required: false }
-        - { name: end,   in: query, type: string, required: false }
-      x-google-backend:
-        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
-        path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses:
-        "200": { description: "OK" }
-
-  /api/book:
-    post:
-      operationId: createBooking
-      security:
-        - app_jwt: []
-        - google_id_token: []
-      x-google-backend:
-        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
-        path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses:
-        "200": { description: "OK" }
-
-  /api/bookings:
-    get:
-      operationId: listBookings
-      security:
-        - app_jwt: []
-        - google_id_token: []
-      parameters:
-        - { name: uid, in: query, type: string, required: false }
-      x-google-backend:
-        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
-        path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
-      responses:
-        "200": { description: "OK" }
-
-  /api/book/{id}:
-    delete:
-      operationId: deleteBooking
-      security:
-        - app_jwt: []
-        - google_id_token: []
-      parameters:
-        - { name: id, in: path, required: true, type: string }
+      security: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -101,8 +37,7 @@ paths:
     get:
       operationId: listMedia
       security:
-        - app_jwt: []
-        - google_id_token: []
+        - supabase_jwt: []
       parameters:
         - { name: folderId, in: query, type: string, required: false }
       x-google-backend:
@@ -115,7 +50,8 @@ paths:
   /api/media/stream/{id}:
     get:
       operationId: streamMedia
-      security: []  # public so range requests & caching work cleanly
+      security:
+        - supabase_jwt: []
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:
@@ -126,10 +62,75 @@ paths:
         "200": { description: "OK" }
         "206": { description: "Partial content" }
 
+  /api/bookings:
+    get:
+      operationId: listBookings
+      security:
+        - supabase_jwt: []
+      parameters:
+        - { name: uid, in: query, type: string, required: false }
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        "200": { description: "OK" }
+    post:
+      operationId: createBooking
+      security:
+        - supabase_jwt: []
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        "200": { description: "OK" }
+
+  /api/bookings/{id}:
+    delete:
+      operationId: deleteBooking
+      security:
+        - supabase_jwt: []
+      parameters:
+        - { name: id, in: path, required: true, type: string }
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        "200": { description: "OK" }
+    put:
+      operationId: updateBooking
+      security:
+        - supabase_jwt: []
+      parameters:
+        - { name: id, in: path, required: true, type: string }
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        "200": { description: "OK" }
+
+  /api/availability:
+    get:
+      operationId: getAvailability
+      security:
+        - supabase_jwt: []
+      parameters:
+        - { name: start, in: query, type: string, required: false }
+        - { name: end, in: query, type: string, required: false }
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
+      responses:
+        "200": { description: "OK" }
+
   /api/youtube/channel/{id}:
     get:
       operationId: getYoutubeChannel
-      security: []  # public; pre-auth friendly
+      security: []
       parameters:
         - { name: id, in: path, required: true, type: string }
       x-google-backend:

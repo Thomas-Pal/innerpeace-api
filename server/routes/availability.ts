@@ -1,7 +1,13 @@
-import type { Request, Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { getCalendarClient } from '../utils/googleCalendar.js';
 import { requireUser } from '../middleware/auth.js';
 import { targetCalendarId } from '../config/environment.js';
+
+export const availabilityRouter = Router();
+
+availabilityRouter.get('/', availabilityHandler);
+
+export default availabilityRouter;
 
 export async function availabilityHandler(req: Request, res: Response) {
   try {
@@ -24,9 +30,7 @@ export async function availabilityHandler(req: Request, res: Response) {
 
     const calEntry = (fb.data.calendars as any)?.[targetCalendarId];
     if (!calEntry) {
-      return res
-        .status(403)
-        .json({ error: 'no_access_to_calendar', calendarId: targetCalendarId });
+      return res.status(403).json({ error: 'no_access_to_calendar', calendarId: targetCalendarId });
     }
 
     const busy = Array.isArray(calEntry.busy) ? (calEntry.busy as any[]) : [];
@@ -38,7 +42,7 @@ export async function availabilityHandler(req: Request, res: Response) {
   } catch (error: unknown) {
     const status = (error as any)?.status || (error as any)?.response?.status;
     if (status === 401) {
-      return res.status(401).json({ code: 401, message: 'Missing JWT' });
+      return res.status(401).json({ code: 401, message: 'Missing Authorization' });
     }
 
     console.error(
