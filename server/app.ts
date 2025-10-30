@@ -9,36 +9,35 @@ import { devLoggerMiddleware } from './middleware/devLogger.js';
 
 const app = express();
 
-// CORS – allow your app origins, and gateway domain
-const allowed = [
-  'exp://',
-  'http://localhost:19006',
-  'http://localhost:8081',
-  'https://innerpeace-gw-4ubziwcf.nw.gateway.dev',
-  'https://innerpeace.app',
-  'https://www.innerpeace.app',
-];
+app.disable('x-powered-by');
+app.use(express.json());
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (allowed.some((a) => origin.startsWith(a))) return cb(null, true);
-    return cb(null, true);
-  },
+  origin: true,
   credentials: true,
 }));
-app.use(express.json());
 app.use(devLoggerMiddleware());
 
-// Public
-app.get('/healthz', (_req, res) => res.json({ ok: true }));
+// Public endpoints
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+app.use('/youtube', youtubeRouter);
+app.use('/api/youtube', youtubeRouter);
 
-// Protected – everything under /api
+// Protect everything else under /api with HS256 check
 app.use('/api', requireSupabaseAuth);
 
 app.use('/api/media', mediaRoutes);
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/availability', availabilityRoutes);
-app.use('/api/youtube', youtubeRouter);
+
+// Diagnostics (temporary but useful)
+app.get('/_diag/auth', (_req, res) => {
+  res.json({
+    expectingAlg: 'HS256',
+    issuer: process.env.SUPABASE_ISSUER,
+    aud: process.env.SUPABASE_AUD,
+    hasSecret: Boolean(process.env.SUPABASE_JWT_SECRET && process.env.SUPABASE_JWT_SECRET.length >= 32),
+  });
+});
 
 // Handle OPTIONS (preflight)
 app.options('*', (_req, res) => res.sendStatus(204));
