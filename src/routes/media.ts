@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { driveClient } from '../lib/drive.js';
-import { requireSupabaseAuth } from '../middleware/auth.js';
-import { signStreamToken, verifyStreamToken } from '../lib/streamToken.js';
+import { signStreamToken, verifyStreamToken } from '../lib/streamToken';
+import { requireSupabaseAuth } from '../middleware/auth';
+import { driveClient } from '../lib/drive';
 
 const router = Router();
 
@@ -62,11 +62,10 @@ router.get('/list', requireSupabaseAuth, async (req, res) => {
   }
 });
 
-router.get('/play/:id', requireSupabaseAuth, async (req, res) => {
+router.get('/play/:id', requireSupabaseAuth, (req, res) => {
   const fileId = req.params.id;
   const exp = Math.floor(Date.now() / 1000) + 60;
-  const sub = (req as any).user?.sub;
-  const token = signStreamToken({ id: fileId, exp, sub });
+  const token = signStreamToken({ id: fileId, exp, sub: (req as any).user?.sub });
   const host = req.get('host') || '';
   const origin = host.includes('gateway.dev')
     ? `https://${host}`
@@ -79,62 +78,50 @@ router.get('/play/:id', requireSupabaseAuth, async (req, res) => {
 
 router.get('/stream/:id', async (req, res) => {
   const fileId = req.params.id;
-  const range = req.headers.range as string | undefined;
-
-  let allowed = false;
   const tok = (req.query.token as string) || '';
-  if (tok) {
-    const p = verifyStreamToken(tok);
-    if (p && p.id === fileId) allowed = true;
-  }
-
+  let allowed = false;
+  const p = tok ? verifyStreamToken(tok) : null;
+  if (p && p.id === fileId) allowed = true;
   if (!allowed) {
     const b = req.header('X-Forwarded-Authorization') || req.header('Authorization') || '';
     if (!b.startsWith('Bearer ')) return res.status(401).json({ code: 401, message: 'Unauthorized' });
     allowed = true;
   }
+  const drive = driveClient();
+  const meta = await drive.files.get({
+    fileId,
+    fields: 'id,name,mimeType,size,md5Checksum,modifiedTime',
+    supportsAllDrives: true,
+  });
+  const size = meta.data.size ? Number(meta.data.size) : undefined;
+  const mime = meta.data.mimeType || 'application/octet-stream';
+  const base: any = {
+    'Content-Type': mime,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'public, max-age=3600',
+    ETag: meta.data.md5Checksum || meta.data.modifiedTime || meta.data.id!,
+  };
 
-  try {
-    const drive = driveClient();
-    const meta = await drive.files.get({
-      fileId,
-      fields: 'id,name,mimeType,size,md5Checksum,modifiedTime',
-      supportsAllDrives: true,
-    });
-    const size = meta.data.size ? Number(meta.data.size) : undefined;
-    const mime = meta.data.mimeType || 'application/octet-stream';
-    const base = {
-      'Content-Type': mime,
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'public, max-age=3600',
-      ETag: meta.data.md5Checksum || meta.data.modifiedTime || meta.data.id!,
-    } as Record<string, string>;
-
-    if (range && size) {
-      const [s, e] = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(s, 10);
-      const end = e ? parseInt(e, 10) : Math.min(start + 2 * 1024 * 1024, size - 1);
-      res
-        .status(206)
-        .set({ ...base, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) });
-      const r = await drive.files.get(
-        { fileId, alt: 'media', supportsAllDrives: true },
-        { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } }
-      );
-      return r.data.pipe(res);
-    }
-
-    res.status(200).set({ ...base, ...(size ? { 'Content-Length': String(size) } : {}) });
+  const range = req.headers.range as string | undefined;
+  if (range && size) {
+    const [s, e] = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(s, 10);
+    const end = e ? parseInt(e, 10) : Math.min(start + 2 * 1024 * 1024, size - 1);
+    res
+      .status(206)
+      .set({ ...base, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) });
     const r = await drive.files.get(
       { fileId, alt: 'media', supportsAllDrives: true },
-      { responseType: 'stream' }
+      { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } }
     );
     return r.data.pipe(res);
-  } catch (e: any) {
-    console.error('[media.stream] error', e?.response?.data || e);
-    const status = e?.code === 416 ? 416 : 500;
-    return res.status(status).json({ code: status, message: 'Drive stream failed' });
   }
+  res.status(200).set({ ...base, ...(size ? { 'Content-Length': String(size) } : {}) });
+  const r = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'stream' }
+  );
+  return r.data.pipe(res);
 });
 
 export default router;
