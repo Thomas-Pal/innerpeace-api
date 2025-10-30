@@ -1,8 +1,22 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { signStreamToken, verifyStreamToken } from '../lib/streamToken';
-import { requireSupabaseAuth } from '../middleware/auth';
-import { driveClient } from '../lib/drive';
+import type { drive_v3 } from 'googleapis';
+import { signStreamToken, verifyStreamToken } from '../lib/streamToken.js';
+import { requireSupabaseAuth } from '../middleware/auth.js';
+import { driveClient } from '../lib/drive.js';
+
+type MediaItem = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: number;
+  md5?: string | null;
+  modifiedTime?: string | null;
+  createdTime?: string | null;
+  streamUrl: string;
+  icon?: string | null;
+  thumb?: string | null;
+};
 
 const router = Router();
 
@@ -25,23 +39,23 @@ router.get('/list', requireSupabaseAuth, async (req, res) => {
       corpora: 'allDrives',
     });
 
-    const items = (data.files || []).map((f) => ({
-      id: f.id!,
-      name: f.name!,
-      mimeType: f.mimeType!,
-      size: f.size ? Number(f.size) : undefined,
-      md5: f.md5Checksum,
-      modifiedTime: f.modifiedTime,
-      createdTime: f.createdTime,
-      streamUrl: `/api/media/stream/${f.id}`,
-      icon: f.iconLink,
-      thumb: f.thumbnailLink,
+    const items: MediaItem[] = (data.files || []).map((file: drive_v3.Schema$File) => ({
+      id: file.id!,
+      name: file.name!,
+      mimeType: file.mimeType!,
+      size: file.size ? Number(file.size) : undefined,
+      md5: file.md5Checksum,
+      modifiedTime: file.modifiedTime,
+      createdTime: file.createdTime,
+      streamUrl: `/api/media/stream/${file.id}`,
+      icon: file.iconLink,
+      thumb: file.thumbnailLink,
     }));
 
     console.log('[BE]/api/media/list', {
       folderId,
       count: items.length,
-      sample: items.slice(0, 3).map((i) => ({ id: i.id, name: i.name })),
+      sample: items.slice(0, 3).map(({ id, name }) => ({ id, name })),
     });
 
     const etag = crypto
