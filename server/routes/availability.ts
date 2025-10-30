@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { getCalendarClient } from '../utils/googleCalendar.js';
-import { requireUser } from '../middleware/auth.js';
+import { requireUser } from '../middleware/requireSupabaseAuth.js';
 import { targetCalendarId } from '../config/environment.js';
 
 export const availabilityRouter = Router();
