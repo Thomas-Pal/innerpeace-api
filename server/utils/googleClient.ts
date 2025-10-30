@@ -1,5 +1,7 @@
 import { JWT } from 'google-auth-library';
 
+type ServiceAccount = { email: string; key: string };
+
 function normalizeKey(rawKey: string | undefined) {
   if (!rawKey) return '';
 
@@ -13,10 +15,45 @@ function normalizeKey(rawKey: string | undefined) {
   return normalized;
 }
 
-let cachedCredentials: { email: string; key: string } | null = null;
+function parseServiceAccountJson(rawJson: string | undefined): ServiceAccount | null {
+  if (!rawJson) return null;
 
-function resolveServiceAccount() {
+  try {
+    const decoded = Buffer.from(rawJson.trim(), 'base64').toString('utf8');
+    if (decoded.includes('client_email') && decoded.includes('private_key')) {
+      const parsed = JSON.parse(decoded);
+      if (parsed.client_email && parsed.private_key) {
+        return { email: parsed.client_email, key: normalizeKey(parsed.private_key) };
+      }
+    }
+  } catch {}
+
+  try {
+    const parsed = JSON.parse(rawJson);
+    if (parsed.client_email && parsed.private_key) {
+      return { email: parsed.client_email, key: normalizeKey(parsed.private_key) };
+    }
+  } catch {}
+
+  return null;
+}
+
+let cachedCredentials: ServiceAccount | null = null;
+
+function resolveServiceAccount(): ServiceAccount {
   if (cachedCredentials) {
+    return cachedCredentials;
+  }
+
+  const jsonCandidate =
+    process.env.GOOGLE_SA_JSON ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+    process.env.GOOGLE_SA_CREDENTIALS ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+
+  const parsed = parseServiceAccountJson(jsonCandidate);
+  if (parsed) {
+    cachedCredentials = parsed;
     return cachedCredentials;
   }
 
@@ -24,7 +61,9 @@ function resolveServiceAccount() {
   const key = normalizeKey(process.env.GOOGLE_SA_KEY);
 
   if (!email || !key) {
-    throw new Error('Google service account credentials are not configured. Set GOOGLE_SA_EMAIL and GOOGLE_SA_KEY.');
+    throw new Error(
+      'Google service account credentials are not configured. Set GOOGLE_SA_JSON (or GOOGLE_SA_EMAIL/GOOGLE_SA_KEY).'
+    );
   }
 
   cachedCredentials = { email, key };
