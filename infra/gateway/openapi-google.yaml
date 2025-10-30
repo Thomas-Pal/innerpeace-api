@@ -10,6 +10,7 @@ paths:
   /healthz:
     get:
       operationId: healthz
+      x-google-allowWithoutApiKey: true
       security: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
@@ -18,6 +19,7 @@ paths:
         "200": { description: "OK" }
     options:
       operationId: healthzOptions
+      x-google-allowWithoutApiKey: true
       security: []
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
@@ -25,11 +27,12 @@ paths:
       responses:
         "204": { description: "CORS preflight" }
 
-  /api/{p*}:
+  /api/{path=**}:
     get:
       operationId: passthroughGet
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: p
+        - name: path
           in: path
           type: string
           required: true
@@ -41,8 +44,9 @@ paths:
         "401": { description: "Unauthorized" }
     post:
       operationId: passthroughPost
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: p
+        - name: path
           in: path
           type: string
           required: true
@@ -54,8 +58,9 @@ paths:
         "401": { description: "Unauthorized" }
     put:
       operationId: passthroughPut
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: p
+        - name: path
           in: path
           type: string
           required: true
@@ -67,8 +72,9 @@ paths:
         "401": { description: "Unauthorized" }
     delete:
       operationId: passthroughDelete
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: p
+        - name: path
           in: path
           type: string
           required: true
@@ -80,8 +86,9 @@ paths:
         "401": { description: "Unauthorized" }
     options:
       operationId: passthroughOptions
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: p
+        - name: path
           in: path
           type: string
           required: true
