@@ -27,6 +27,31 @@ paths:
       responses:
         "204": { description: "CORS preflight" }
 
+  /api/media/list:
+    get:
+      operationId: listMedia
+      x-google-allowWithoutApiKey: true
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+      parameters:
+        - name: folderId
+          in: query
+          required: true
+          type: string
+        - name: pageToken
+          in: query
+          required: false
+          type: string
+        - name: pageSize
+          in: query
+          required: false
+          type: integer
+      responses:
+        "200": { description: "OK" }
+        "400": { description: "Missing folderId" }
+        "401": { description: "Unauthorized" }
+
   /api/{path=**}:
     get:
       operationId: passthroughGet
