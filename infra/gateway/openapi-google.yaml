@@ -5,181 +5,99 @@ info:
 
 schemes: ["https"]
 produces: ["application/json"]
-basePath: "/"
-
-# Require either Supabase JWT OR an API key (we won't actually send the key).
-security:
-  - supabase_jwt: []
-  - api_key: []
-
-securityDefinitions:
-  # Supabase access token (one-token flow via Supabase)
-  supabase_jwt:
-    type: oauth2
-    flow: implicit
-    authorizationUrl: ""   # ignored by ESPv2
-    x-google-issuer: "https://pnqnlqjkcslkiodsdjhe.supabase.co/auth/v1"
-    x-google-jwks_uri: "https://pnqnlqjkcslkiodsdjhe.supabase.co/auth/v1/keys"
-    x-google-audiences: "authenticated"
-    x-google-jwt-locations:
-      - header: "Authorization"
-        value_prefix: "Bearer "
-  # Dummy API key to satisfy API Gateway validator (not required by your client)
-  api_key:
-    type: apiKey
-    name: x-api-key
-    in: header
-
-# Cloud Run backend applied globally
-x-google-backend:
-  address: "https://innerpeace-api-379484922687.europe-west2.run.app"
-  path_translation: APPEND_PATH_TO_ADDRESS
-  jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
 
 paths:
-  # ---- Health: PUBLIC ----
   /healthz:
     get:
-      operationId: healthCheck
-      security: []   # public
+      operationId: healthz
+      x-google-allowWithoutApiKey: true
+      security: []
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
-        "200": { description: OK }
+        "200": { description: "OK" }
     options:
-      operationId: healthPreflight
-      security: []   # public preflight
+      operationId: healthzOptions
+      x-google-allowWithoutApiKey: true
+      security: []
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
-        "204": { description: CORS preflight }
+        "204": { description: "CORS preflight" }
 
-  # ---- YouTube: PUBLIC ----
-  /api/youtube/channel/{id}:
+  /api/{path=**}:
     get:
-      operationId: getYoutubeChannel
-      security: []   # public
+      operationId: passthroughGet
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: id
+        - name: path
           in: path
+          type: string
           required: true
-          type: string
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
-        "200": { description: OK }
-    options:
-      operationId: youtubePreflight
-      security: []   # public preflight
-      parameters:
-        - name: id          # IMPORTANT: declare same path param to avoid google.protobuf.Empty error
-          in: path
-          required: true
-          type: string
-      responses:
-        "204": { description: CORS preflight }
-
-  # ---- Availability: PROTECTED (JWT or api_key) ----
-  /api/availability:
-    get:
-      operationId: getAvailability
-      parameters:
-        - name: start
-          in: query
-          required: false
-          type: string
-        - name: end
-          in: query
-          required: false
-          type: string
-      responses:
-        "200": { description: OK }
-    options:
-      operationId: availabilityPreflight
-      security: []   # public preflight
-      responses:
-        "204": { description: CORS preflight }
-
-  # ---- Bookings: PROTECTED ----
-  /api/bookings:
-    get:
-      operationId: listBookings
-      parameters:
-        - name: uid
-          in: query
-          required: false
-          type: string
-      responses:
-        "200": { description: OK }
+        "200": { description: "OK" }
+        "401": { description: "Unauthorized" }
     post:
-      operationId: createBooking
-      responses:
-        "200": { description: OK }
-    options:
-      operationId: bookingsPreflight
-      security: []   # public preflight
-      responses:
-        "204": { description: CORS preflight }
-
-  /api/bookings/{id}:
-    delete:
-      operationId: deleteBooking
+      operationId: passthroughPost
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: id
+        - name: path
           in: path
-          required: true
           type: string
+          required: true
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
-        "200": { description: OK }
+        "200": { description: "OK" }
+        "401": { description: "Unauthorized" }
     put:
-      operationId: updateBooking
+      operationId: passthroughPut
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: id
+        - name: path
           in: path
-          required: true
           type: string
+          required: true
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
-        "200": { description: OK }
+        "200": { description: "OK" }
+        "401": { description: "Unauthorized" }
+    delete:
+      operationId: passthroughDelete
+      x-google-allowWithoutApiKey: true
+      parameters:
+        - name: path
+          in: path
+          type: string
+          required: true
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        "200": { description: "OK" }
+        "401": { description: "Unauthorized" }
     options:
-      operationId: bookingsIdPreflight
-      security: []   # public preflight
+      operationId: passthroughOptions
+      x-google-allowWithoutApiKey: true
       parameters:
-        - name: id        # IMPORTANT: declare same path param
+        - name: path
           in: path
-          required: true
           type: string
+          required: true
+      security: []
+      x-google-backend:
+        address: "https://innerpeace-api-379484922687.europe-west2.run.app"
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
-        "204": { description: CORS preflight }
+        "204": { description: "CORS preflight" }
 
-  # ---- Media: PROTECTED ----
-  /api/media/list:
-    get:
-      operationId: listMedia
-      parameters:
-        - name: folderId
-          in: query
-          required: false
-          type: string
-      responses:
-        "200": { description: OK }
-    options:
-      operationId: mediaListPreflight
-      security: []   # public preflight
-      responses:
-        "204": { description: CORS preflight }
-
-  /api/media/stream/{id}:
-    get:
-      operationId: streamMedia
-      parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
-      responses:
-        "200": { description: OK }
-        "206": { description: Partial content }
-    options:
-      operationId: mediaStreamPreflight
-      security: []   # public preflight
-      parameters:
-        - name: id      # IMPORTANT: declare same path param
-          in: path
-          required: true
-          type: string
-      responses:
-        "204": { description: CORS preflight }
+# Note: No securityDefinitions here on purpose; gateway does NOT do JWT.
+# Ensure API Keys are NOT enforced in the API config in Console.

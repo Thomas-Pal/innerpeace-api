@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { calendar_v3 } from 'googleapis';
 import { getCalendarClient } from '../utils/googleCalendar.js';
-import { requireUser } from '../middleware/auth.js';
+import { requireUser } from '../middleware/requireSupabaseAuth.js';
 import { targetCalendarId } from '../config/environment.js';
 import { pickMeetUrl } from '../utils/events.js';
 import { createBooking, cancelBooking, updateBooking } from './booking.js';
