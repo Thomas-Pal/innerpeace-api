@@ -1,48 +1,76 @@
 import type { Request, Response, NextFunction } from 'express';
-import { jwtVerify } from 'jose';
+import { createSecretKey } from 'crypto';
+import { jwtVerify, decodeProtectedHeader } from 'jose';
 
-// Build issuer like: https://<ref>.supabase.co/auth/v1
-function expectedIssuer(): string {
-  const fromEnv = process.env.SUPABASE_ISSUER;
-  if (fromEnv) return fromEnv.replace(/\/+$/, '');
-  const ref = process.env.SUPABASE_PROJECT_REF;
-  if (!ref) throw new Error('SUPABASE_PROJECT_REF or SUPABASE_ISSUER is required');
-  return `https://${ref}.supabase.co/auth/v1`;
+const REQUIRED_ALG = 'HS256';
+
+const {
+  SUPABASE_JWT_SECRET,
+  SUPABASE_ISSUER,
+  SUPABASE_AUD = 'authenticated',
+} = process.env;
+
+if (!SUPABASE_JWT_SECRET) {
+  console.error('FATAL: SUPABASE_JWT_SECRET missing');
+  // Fail fast in prod; ok to keep running in local if you want.
 }
-const AUD = process.env.SUPABASE_AUD || 'authenticated';
+
+const secretKey = SUPABASE_JWT_SECRET
+  ? createSecretKey(Buffer.from(SUPABASE_JWT_SECRET, 'utf8'))
+  : undefined;
+
+// Public paths (no auth)
+const PUBLIC_PREFIXES = ['/healthz', '/youtube', '/api/youtube'];
 
 export async function requireSupabaseAuth(req: Request, res: Response, next: NextFunction) {
+  // Allow public routes
+  if (PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
+
+  // Everything else requires HS256 Supabase access_token
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!token) {
+    return res.status(401).json({ code: 401, message: 'Unauthorized', hint: 'Missing Bearer token' });
+  }
+
+  let alg: string | undefined;
   try {
-    const auth = req.header('authorization') || req.header('Authorization');
-    if (!auth?.startsWith('Bearer ')) {
-      return res.status(401).json({ code: 401, message: 'Missing Bearer token' });
-    }
-    const token = auth.slice('Bearer '.length).trim();
+    ({ alg } = decodeProtectedHeader(token));
+  } catch (error: any) {
+    return res.status(401).json({ code: 401, message: 'Unauthorized', hint: error?.message || 'Invalid token header' });
+  }
 
-    // HS256 verification: use SUPABASE_JWT_SECRET
-    const secret = process.env.SUPABASE_JWT_SECRET;
-    if (!secret) {
-      return res.status(500).json({ code: 500, message: 'Server auth misconfigured: SUPABASE_JWT_SECRET missing' });
-    }
+  if (alg !== REQUIRED_ALG) {
+    return res.status(401).json({
+      code: 401,
+      message: 'Unauthorized',
+      hint: `Expected Supabase access_token (${REQUIRED_ALG}) but received ${alg}. Ensure client sends supabase.session.access_token.`,
+    });
+  }
 
-    const iss = expectedIssuer();
-    const encoder = new TextEncoder();
-    const key = encoder.encode(secret);
+  if (!secretKey) {
+    return res.status(500).json({ code: 500, message: 'Server auth misconfigured: SUPABASE_JWT_SECRET missing' });
+  }
 
-    const { payload } = await jwtVerify(token, key, { issuer: iss, audience: AUD });
+  try {
+    const { payload } = await jwtVerify(token, secretKey, {
+      algorithms: [REQUIRED_ALG],
+      issuer: SUPABASE_ISSUER || undefined,
+      audience: SUPABASE_AUD,
+    });
 
-    // Attach minimal user to request (extend as needed)
     req.user = {
-      sub: payload.sub,
-      email: (payload as any).email,
-      role: (payload as any).role,
-      aud: payload.aud as string,
-      iss: payload.iss as string,
-      exp: payload.exp as number,
+      sub: typeof payload.sub === 'string' ? payload.sub : undefined,
+      email: typeof payload.email === 'string' ? payload.email : undefined,
+      role: typeof payload.role === 'string' ? payload.role : undefined,
+      aud: typeof payload.aud === 'string' ? payload.aud : undefined,
+      iss: typeof payload.iss === 'string' ? payload.iss : undefined,
+      exp: typeof payload.exp === 'number' ? payload.exp : undefined,
     };
+
     return next();
-  } catch (err: any) {
-    return res.status(401).json({ code: 401, message: 'Unauthorized', hint: err?.message || 'invalid token' });
+  } catch (e: any) {
+    return res.status(401).json({ code: 401, message: 'Unauthorized', hint: e?.message || 'Invalid token' });
   }
 }
 
