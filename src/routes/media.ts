@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { driveClient } from '../lib/drive.js';
+import { buildMediaListEtag } from '../lib/etag.js';
 import { requireSupabaseAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -42,7 +43,27 @@ router.get('/list', requireSupabaseAuth, async (req, res) => {
       thumb: f.thumbnailLink,
     }));
 
-    res.set('Cache-Control', 'public, max-age=60');
+    if (process.env.MEDIA_LIST_NO_STORE === 'true') {
+      res.set('Cache-Control', 'no-store');
+      return res.json({ items, nextPageToken: data.nextPageToken || null });
+    }
+
+    const etag = buildMediaListEtag(items);
+    const ifNoneMatch = req.header('If-None-Match');
+
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      res.set({
+        ETag: etag,
+        'Cache-Control': 'public, max-age=60',
+      });
+      return res.status(304).end();
+    }
+
+    res.set({
+      ETag: etag,
+      'Cache-Control': 'public, max-age=60',
+    });
+
     res.json({ items, nextPageToken: data.nextPageToken || null });
   } catch (e: any) {
     // eslint-disable-next-line no-console
