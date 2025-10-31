@@ -48,8 +48,7 @@ function resolveServiceAccount(): ServiceAccount {
   const jsonCandidate =
     process.env.GOOGLE_SA_JSON ||
     process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
-    process.env.GOOGLE_SA_CREDENTIALS ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    process.env.GOOGLE_SA_CREDENTIALS;
 
   const parsed = parseServiceAccountJson(jsonCandidate);
   if (parsed) {

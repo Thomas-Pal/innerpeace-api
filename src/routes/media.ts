@@ -3,7 +3,7 @@ import { listMediaHandler } from '../http/media.js';
 import { extractBearerToken, verifySupabaseJwt } from '../lib/supabaseJwt.js';
 import { signStreamToken, verifyStreamToken } from '../lib/streamToken.js';
 import { requireSupabaseAuth } from '../middleware/auth.js';
-import { getDriveClient } from '../services/drive.js';
+import { getDrive } from '../google/drive.js';
 
 const router = Router();
 
@@ -39,7 +39,7 @@ router.get('/stream/:id', async (req, res) => {
     }
     allowed = true;
   }
-  const drive = getDriveClient();
+  const drive = await getDrive();
   const meta = await drive.files.get({
     fileId,
     fields: 'id,name,mimeType,size,md5Checksum,modifiedTime',
