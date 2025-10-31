@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireUser } from '../middleware/requireUser.js';
 import { getDrive } from '../google/drive.js';
+import { badRequest } from '../utils/http.js';
 
 const r = Router();
 
@@ -11,7 +12,7 @@ r.get('/api/media/list', requireUser, async (req, res) => {
       process.env.MEDIA_FOLDER_ID ||
       process.env.DRIVE_MEDIA_FOLDER_ID;
 
-    if (!folderId) return res.status(400).json({ code: 400, message: 'folderId required' });
+    if (!folderId) return badRequest(res, 'folderId required');
 
     const drive = await getDrive();
     const resp = await drive.files.list({
