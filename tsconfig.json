@@ -16,6 +16,7 @@
   "exclude": [
     "src/auth/**/*",
     "src/lib/supabase.ts",
+    "src/lib/api.ts",
     "src/stores/**/*",
     "app/**/*"
   ]
