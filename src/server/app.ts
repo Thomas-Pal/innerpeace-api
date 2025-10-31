@@ -5,6 +5,8 @@ import helmet from 'helmet';
 // Routes
 import healthRoutes from '../routes/health.js';
 import mediaRoutes from '../routes/media.js';
+import youtubeRoutes from '../routes/youtube.js';
+import availabilityRoutes from '../routes/availability.js';
 
 const app = express();
 
@@ -21,6 +23,9 @@ app.use(express.json());
 // Routes
 app.use(healthRoutes);
 app.use(mediaRoutes);
+app.use('/youtube', youtubeRoutes);
+app.use('/api/youtube', youtubeRoutes);
+app.use('/api/availability', availabilityRoutes);
 
 // Root ping
 app.get('/', (_req, res) => res.json({ ok: true }));
