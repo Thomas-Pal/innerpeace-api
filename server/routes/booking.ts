@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { calendar_v3 } from 'googleapis';
 import { getCalendarClient } from '../utils/googleCalendar.js';
-import { requireUser } from '../middleware/requireSupabaseAuth.js';
+import { ensureUser } from '../middleware/requireSupabaseAuth.js';
 import config, { targetCalendarId } from '../config/environment.js';
 import { pickMeetUrl } from '../utils/events.js';
 
@@ -13,7 +13,7 @@ function shouldCreateMeet(mode?: string | null): boolean {
 
 async function getCalendarOr401(req: Request, res: Response) {
   try {
-    requireUser(req);
+    ensureUser(req);
   } catch (error: any) {
     const status = error?.status || error?.response?.status;
     if (status === 401) {
