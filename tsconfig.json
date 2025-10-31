@@ -11,5 +11,11 @@
     "sourceMap": true,
     "isolatedModules": true
   },
-  "include": ["server/**/*.ts", "server/**/*.d.ts", "src/**/*.ts", "src/**/*.d.ts"]
+  "include": ["server/**/*.ts", "server/**/*.d.ts", "src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": [
+    "src/auth/**/*",
+    "src/lib/supabase.ts",
+    "src/stores/**/*",
+    "app/**/*"
+  ]
 }
