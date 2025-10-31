@@ -7,6 +7,7 @@ import healthRoutes from '../routes/health.js';
 import mediaRoutes from '../routes/media.js';
 import youtubeRoutes from '../routes/youtube.js';
 import availabilityRoutes from '../routes/availability.js';
+import { requireAuth } from '../middleware/requireAuth.js';
 
 const app = express();
 
@@ -20,12 +21,29 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Routes
+// Public probes
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
 app.use(healthRoutes);
-app.use(mediaRoutes);
-app.use('/youtube', youtubeRoutes);
+
+// Optional public debug to confirm headers arrive from device (remove later)
+app.get('/api/debug/whoami', (req, res) => {
+  res.json({
+    ok: true,
+    gotAuth: !!(req.headers.authorization || req.headers['x-supabase-auth']),
+    hint: 'This is public; remove in prod.',
+  });
+});
+
+// Protect everything else under /api
+app.use('/api', requireAuth);
+
+// Protected routes
+app.use('/api', mediaRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/availability', availabilityRoutes);
+
+// Legacy public YouTube proxy
+app.use('/youtube', youtubeRoutes);
 
 // Root ping
 app.get('/', (_req, res) => res.json({ ok: true }));
