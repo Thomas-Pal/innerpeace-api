@@ -6,6 +6,7 @@ import bookingsRoutes from './routes/bookings.js';
 import availabilityRoutes from './routes/availability.js';
 import youtubeRouter from './routes/youtube.js';
 import { devLoggerMiddleware } from './middleware/devLogger.js';
+import healthRoutes from './routes/health.js';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use(devLoggerMiddleware());
 
 // Public endpoints
 app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+app.use(healthRoutes);
 app.use('/youtube', youtubeRouter);
 app.use('/api/youtube', youtubeRouter);
 

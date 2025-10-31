@@ -4,7 +4,10 @@ import { extractBearerToken, verifySupabaseJwt } from '../lib/supabaseJwt.js';
 import { listDriveMedia } from '../services/drive.js';
 
 export async function listMediaHandler(req: Request, res: Response) {
-  const folderId = req.query.folderId as string | undefined;
+  const folderId =
+    (req.query.folderId as string) ||
+    process.env.MEDIA_FOLDER_ID ||
+    process.env.DRIVE_MEDIA_FOLDER_ID;
   const pageToken = (req.query.pageToken as string) || undefined;
   const pageSizeRaw = (req.query.pageSize as string) || undefined;
   const parsedPageSize = pageSizeRaw ? Number.parseInt(pageSizeRaw, 10) : 50;
@@ -22,7 +25,7 @@ export async function listMediaHandler(req: Request, res: Response) {
   }
 
   if (!folderId) {
-    return res.status(400).json({ code: 400, message: 'Missing folderId' });
+    return res.status(400).json({ code: 400, message: 'folderId required' });
   }
 
   try {

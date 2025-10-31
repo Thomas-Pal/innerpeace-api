@@ -1,19 +1,5 @@
-import { google, type drive_v3 } from 'googleapis';
-import { getSaJwt } from '../../server/utils/googleClient.js';
-
-const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.readonly'];
-
-let cachedClient: drive_v3.Drive | null = null;
-
-export function getDriveClient() {
-  if (cachedClient) {
-    return cachedClient;
-  }
-
-  const auth = getSaJwt(DRIVE_SCOPES);
-  cachedClient = google.drive({ version: 'v3', auth });
-  return cachedClient;
-}
+import type { drive_v3 } from 'googleapis';
+import { getDrive } from '../google/drive.js';
 
 export interface ListDriveMediaOptions {
   pageToken?: string;
@@ -30,7 +16,7 @@ export async function listDriveMedia(
   folderId: string,
   { pageToken, pageSize, mimeTypes }: ListDriveMediaOptions = {}
 ): Promise<ListDriveMediaResult> {
-  const drive = getDriveClient();
+  const drive = await getDrive();
   const safeFolderId = folderId.replace(/'/g, "\\'");
   const filters = (mimeTypes && mimeTypes.length ? mimeTypes : null) || [
     "mimeType contains 'audio/'",
