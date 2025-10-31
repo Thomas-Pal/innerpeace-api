@@ -35,7 +35,7 @@ export async function getDrive() {
   }
 
   const auth = new GoogleAuth({ scopes: SCOPES });
-  await auth.getClient();
-  cachedDrive = google.drive({ version: 'v3', auth });
+  const client = (await auth.getClient()) as drive_v3.Options['auth'];
+  cachedDrive = google.drive({ version: 'v3', auth: client });
   return cachedDrive;
 }
