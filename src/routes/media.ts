@@ -1,81 +1,31 @@
 import { Router } from 'express';
-import { listMediaHandler } from '../http/media.js';
-import { signStreamToken, verifyStreamToken } from '../lib/streamToken.js';
-import { requireUser, extractBearer } from '../middleware/requireUser.js';
-import { supabaseAdmin } from '../supabase/admin.js';
+import { requireUser } from '../middleware/requireUser.js';
 import { getDrive } from '../google/drive.js';
 
-const router = Router();
+const r = Router();
 
-router.get('/list', requireUser, listMediaHandler);
+r.get('/api/media/list', requireUser, async (req, res) => {
+  try {
+    const folderId =
+      (req.query.folderId as string) ||
+      process.env.MEDIA_FOLDER_ID ||
+      process.env.DRIVE_MEDIA_FOLDER_ID;
 
-router.get('/play/:id', requireUser, (req, res) => {
-  const fileId = req.params.id;
-  const exp = Math.floor(Date.now() / 1000) + 60;
-  const supabaseUser = (req as any).user;
-  const subject = supabaseUser?.id ?? supabaseUser?.sub;
-  const token = signStreamToken({ id: fileId, exp, sub: subject });
-  const host = req.get('host') || '';
-  const origin = host.includes('gateway.dev')
-    ? `https://${host}`
-    : 'https://innerpeace-gw-4ubziwcf.nw.gateway.dev';
-  res.json({
-    url: `${origin}/api/media/stream/${encodeURIComponent(fileId)}?token=${encodeURIComponent(token)}`,
-    exp,
-  });
+    if (!folderId) return res.status(400).json({ code: 400, message: 'folderId required' });
+
+    const drive = await getDrive();
+    const resp = await drive.files.list({
+      q: `'${folderId}' in parents and trashed=false`,
+      fields: 'files(id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink)',
+      pageSize: Number(req.query.pageSize ?? 50),
+      orderBy: 'modifiedTime desc',
+    });
+
+    return res.json({ files: resp.data.files ?? [] });
+  } catch (e: any) {
+    console.error('[media.list] error', e?.message || e);
+    return res.status(500).json({ code: 500, message: 'Drive list failed' });
+  }
 });
 
-router.get('/stream/:id', async (req, res) => {
-  const fileId = req.params.id;
-  const tok = (req.query.token as string) || '';
-  let allowed = false;
-  const p = tok ? verifyStreamToken(tok) : null;
-  if (p && p.id === fileId) allowed = true;
-  if (!allowed) {
-    const token = extractBearer(req);
-    if (!token) return res.status(401).json({ code: 401, message: 'Unauthorized' });
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) {
-      return res.status(401).json({ code: 401, message: 'Unauthorized' });
-    }
-    (req as typeof req & { user?: typeof data.user }).user = data.user;
-    allowed = true;
-  }
-  const drive = await getDrive();
-  const meta = await drive.files.get({
-    fileId,
-    fields: 'id,name,mimeType,size,md5Checksum,modifiedTime',
-    supportsAllDrives: true,
-  });
-  const size = meta.data.size ? Number(meta.data.size) : undefined;
-  const mime = meta.data.mimeType || 'application/octet-stream';
-  const base: any = {
-    'Content-Type': mime,
-    'Accept-Ranges': 'bytes',
-    'Cache-Control': 'public, max-age=3600',
-    ETag: meta.data.md5Checksum || meta.data.modifiedTime || meta.data.id!,
-  };
-
-  const range = req.headers.range as string | undefined;
-  if (range && size) {
-    const [s, e] = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(s, 10);
-    const end = e ? parseInt(e, 10) : Math.min(start + 2 * 1024 * 1024, size - 1);
-    res
-      .status(206)
-      .set({ ...base, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) });
-    const r = await drive.files.get(
-      { fileId, alt: 'media', supportsAllDrives: true },
-      { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } }
-    );
-    return r.data.pipe(res);
-  }
-  res.status(200).set({ ...base, ...(size ? { 'Content-Length': String(size) } : {}) });
-  const r = await drive.files.get(
-    { fileId, alt: 'media', supportsAllDrives: true },
-    { responseType: 'stream' }
-  );
-  return r.data.pipe(res);
-});
-
-export default router;
+export default r;

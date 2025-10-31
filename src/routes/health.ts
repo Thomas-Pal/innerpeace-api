@@ -1,17 +1,17 @@
 import { Router } from 'express';
 import { getDrive } from '../google/drive.js';
+const r = Router();
 
-const router = Router();
+r.get('/health', (_req, res) => res.json({ ok: true }));
 
-router.get('/health/drive', async (_req, res) => {
+r.get('/health/drive', async (_req, res) => {
   try {
     const drive = await getDrive();
     await drive.files.list({ pageSize: 1, fields: 'files(id)' });
     return res.json({ ok: true });
   } catch (e: any) {
-    console.error('[health.drive] error', e?.message || e);
     return res.status(500).json({ ok: false, error: e?.message || 'failed' });
   }
 });
 
-export default router;
+export default r;
