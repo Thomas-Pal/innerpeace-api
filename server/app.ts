@@ -12,10 +12,14 @@ const app = express();
 
 app.disable('x-powered-by');
 app.use(express.json());
-app.use(cors({
-  origin: true,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  })
+);
 app.use(devLoggerMiddleware());
 
 // Public endpoints
@@ -24,7 +28,7 @@ app.use(healthRoutes);
 app.use('/youtube', youtubeRouter);
 app.use('/api/youtube', youtubeRouter);
 
-// Protect everything else under /api with HS256 check
+// Protect everything else under /api with Supabase auth validation
 app.use('/api', requireSupabaseAuth);
 
 app.use('/api/media', mediaRoutes);
@@ -34,10 +38,8 @@ app.use('/api/availability', availabilityRoutes);
 // Diagnostics (temporary but useful)
 app.get('/_diag/auth', (_req, res) => {
   res.json({
-    expectingAlg: 'HS256',
-    issuer: process.env.SUPABASE_ISSUER,
-    aud: process.env.SUPABASE_AUD,
-    hasSecret: Boolean(process.env.SUPABASE_JWT_SECRET && process.env.SUPABASE_JWT_SECRET.length >= 32),
+    supabaseUrlConfigured: Boolean(process.env.SUPABASE_URL),
+    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
   });
 });
 

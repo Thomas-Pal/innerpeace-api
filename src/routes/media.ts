@@ -1,18 +1,20 @@
 import { Router } from 'express';
 import { listMediaHandler } from '../http/media.js';
-import { extractBearerToken, verifySupabaseJwt } from '../lib/supabaseJwt.js';
 import { signStreamToken, verifyStreamToken } from '../lib/streamToken.js';
-import { requireSupabaseAuth } from '../middleware/auth.js';
+import { requireUser, extractBearer } from '../middleware/requireUser.js';
+import { supabaseAdmin } from '../supabase/admin.js';
 import { getDrive } from '../google/drive.js';
 
 const router = Router();
 
-router.get('/list', listMediaHandler);
+router.get('/list', requireUser, listMediaHandler);
 
-router.get('/play/:id', requireSupabaseAuth, (req, res) => {
+router.get('/play/:id', requireUser, (req, res) => {
   const fileId = req.params.id;
   const exp = Math.floor(Date.now() / 1000) + 60;
-  const token = signStreamToken({ id: fileId, exp, sub: (req as any).user?.sub });
+  const supabaseUser = (req as any).user;
+  const subject = supabaseUser?.id ?? supabaseUser?.sub;
+  const token = signStreamToken({ id: fileId, exp, sub: subject });
   const host = req.get('host') || '';
   const origin = host.includes('gateway.dev')
     ? `https://${host}`
@@ -30,13 +32,13 @@ router.get('/stream/:id', async (req, res) => {
   const p = tok ? verifyStreamToken(tok) : null;
   if (p && p.id === fileId) allowed = true;
   if (!allowed) {
-    const bearer = extractBearerToken(req);
-    if (!bearer) return res.status(401).json({ code: 401, message: 'Unauthorized' });
-    try {
-      verifySupabaseJwt(bearer);
-    } catch {
+    const token = extractBearer(req);
+    if (!token) return res.status(401).json({ code: 401, message: 'Unauthorized' });
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data?.user) {
       return res.status(401).json({ code: 401, message: 'Unauthorized' });
     }
+    (req as typeof req & { user?: typeof data.user }).user = data.user;
     allowed = true;
   }
   const drive = await getDrive();

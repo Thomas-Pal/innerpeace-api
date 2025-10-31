@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import type { Request, Response } from 'express';
-import { extractBearerToken, verifySupabaseJwt } from '../lib/supabaseJwt.js';
 import { listDriveMedia } from '../services/drive.js';
 
 export async function listMediaHandler(req: Request, res: Response) {
@@ -12,17 +11,6 @@ export async function listMediaHandler(req: Request, res: Response) {
   const pageSizeRaw = (req.query.pageSize as string) || undefined;
   const parsedPageSize = pageSizeRaw ? Number.parseInt(pageSizeRaw, 10) : 50;
   const pageSize = Math.min(Math.max(Number.isFinite(parsedPageSize) ? parsedPageSize : 50, 1), 200);
-
-  const token = extractBearerToken(req);
-  if (!token) {
-    return res.status(401).json({ code: 401, message: 'Unauthorized' });
-  }
-
-  try {
-    verifySupabaseJwt(token);
-  } catch (error) {
-    return res.status(401).json({ code: 401, message: 'Unauthorized' });
-  }
 
   if (!folderId) {
     return res.status(400).json({ code: 400, message: 'folderId required' });
