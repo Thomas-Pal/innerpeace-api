@@ -8,21 +8,49 @@ import mediaRoutes from '../routes/media.js';
 import youtubeRoutes from '../routes/youtube.js';
 import availabilityRoutes from '../routes/availability.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { buildCorrelationId, logger } from '../logging/logger.js';
 
 const app = express();
 
-// Keep startup “dumb”: no env throws here
+// Request correlation + logging first so downstream middleware can use it
+app.use((req, res, next) => {
+  const id = buildCorrelationId(req.headers['x-correlation-id']);
+  (req as any).correlationId = id;
+  res.setHeader('x-correlation-id', id);
+  next();
+});
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  const id = (req as any).correlationId;
+  logger.info({ tag: 'http.start', id, method: req.method, path: req.originalUrl });
+  res.on('finish', () => {
+    logger.info({
+      tag: 'http.finish',
+      id,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+    });
+  });
+  next();
+});
+
+// Public probes must stay unauthenticated
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+
+// Global middleware
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({
   origin: true,
   credentials: false,
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-supabase-auth'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }));
 app.use(express.json());
 
-// Public probes
-app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+// Public diagnostics
 app.use(healthRoutes);
 
 // Optional public debug to confirm headers arrive from device (remove later)
