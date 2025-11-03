@@ -15,6 +15,7 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
     options:
@@ -24,6 +25,7 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "204": { description: "CORS preflight" }
 
@@ -34,6 +36,7 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       parameters:
         - name: folderId
           in: query
@@ -64,6 +67,7 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
         "401": { description: "Unauthorized" }
@@ -78,6 +82,7 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
         "401": { description: "Unauthorized" }
@@ -92,6 +97,7 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
         "401": { description: "Unauthorized" }
@@ -106,6 +112,7 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "200": { description: "OK" }
         "401": { description: "Unauthorized" }
@@ -121,8 +128,9 @@ paths:
       x-google-backend:
         address: "https://innerpeace-api-379484922687.europe-west2.run.app"
         path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: "https://innerpeace-api-379484922687.europe-west2.run.app"
       responses:
         "204": { description: "CORS preflight" }
 
-# Note: No securityDefinitions here on purpose; gateway does NOT do JWT.
-# Ensure API Keys are NOT enforced in the API config in Console.
+# Note: Gateway does NOT validate Supabase JWTs. Cloud Run auth is satisfied by a Google ID token
+# that the gateway injects (via jwt_audience). Your app still validates Supabase tokens on /api/*.
